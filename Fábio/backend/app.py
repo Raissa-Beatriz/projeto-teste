@@ -13,10 +13,10 @@ app = Flask(__name__, static_folder=os.path.abspath(os.path.join(os.path.dirname
 
 # Configurações do Banco de Dados MySQL
 db_config = {
-    'host': 'localhost',
-    'database': 'Scratch',
-    'user': 'root',
-    'password': '1234' # SUA SENHA AQUI
+    'host': os.environ.get('DB_HOST', 'localhost'),
+    'database': os.environ.get('DB_NAME', 'Scratch'),
+    'user': os.environ.get('DB_USER', 'root'),
+    'password': os.environ.get('DB_PASSWORD', '1234')
 }
 
 # Configuração para uploads de materiais
