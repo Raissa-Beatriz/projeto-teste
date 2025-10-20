@@ -8,7 +8,7 @@ import string
 import time
 from werkzeug.utils import secure_filename
 
-# CORREÇÃO AQUI: static_folder deve apontar para o nome real da sua pasta de frontend
+# Trecho em Fábio/backend/app.py
 app = Flask(__name__, static_folder=os.path.abspath(os.path.join(os.path.dirname(__file__), '../PROJETO_FINAL')), static_url_path='/')
 
 # Configurações do Banco de Dados MySQL
