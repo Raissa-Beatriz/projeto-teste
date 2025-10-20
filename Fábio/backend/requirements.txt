@@ -1,0 +1,4 @@
+Flask
+mysql-connector-python
+werkzeug
+gunicorn # Servidor WSGI para produção
