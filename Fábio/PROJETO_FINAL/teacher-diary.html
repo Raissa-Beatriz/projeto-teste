@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diário de Classe - Curso de Scratch</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="main-layout">
+        <header class="header">
+            <div class="logo">
+                <img src="img/scratch.png" height="50" width="50" alt="Scratch Logo" id="scratch-logo">
+            </div>
+            <nav>
+                <ul class="nav-menu">
+                    <li id="navAdmin"><a href="admin.html">Administração de Usuários</a></li>
+                    <li id="navBancoDados"><a href="database.html">Banco de Dados</a></li>
+                    <li id="navDiarioClasseProf"><a href="teacher-diary.html" class="active">Diário de Classe</a></li>
+                    <li id="navActivitiesProf"><a href="teacher-activities.html">Atividades</a></li>
+                    <li id="navMateriaisProf"><a href="teacher-materials.html">Materiais</a></li>
+                    
+                    <li class="dropdown">
+                        <a href="#">Links Externos ▼</a>
+                        <div class="dropdown-content">
+                            <a href="https://scratch.mit.edu/" target="_blank">Scratch Website</a>
+                            <a href="https://scratch.mit.edu/projects/editor/" target="_blank">Editor do Scratch</a>
+                            <a href="https://scratch.mit.edu/ideas" target="_blank">Ideias de Projetos</a>
+                            <a href="https://www.youtube.com/results?search_query=scratch+tutorial+português" target="_blank">Tutoriais YouTube</a>
+                            <a href="https://wayground.com/home-v1?lng=pt-BR" target="_blank">Wayground (Quizizz)</a>
+                        </div>
+                    </li>
+                    <li class="dropdown">
+                        <a href="#">Informações ▼</a>
+                        <div class="dropdown-content">
+                            <a href="horario-onibus.html">Horário do Ônibus</a>
+                            <a href="calendario-aulas.html">Calendário das Aulas</a>
+                            <a href="#" onclick="abrirWhatsApp()">Link do grupo do WhatsApp</a>
+                            <a href="endereco-aula.html">Endereço do Local das Aulas</a>
+                            <a href="contato.html">Contato</a>
+                        </div>
+                    </li>
+                </ul>
+            </nav>
+            <div class="user-profile">
+                <div class="user-avatar"><img src="img/icon-user.png" height="40" width="40" alt="Icone do Perfil"></div>
+            </div>
+        </header>
+        
+        <main class="content">
+            <h1 class="page-title">🗓️ Diário de Classe</h1>
+            
+            <div class="attendance-controls">
+                <div class="dropdown-group">
+                    <div class="form-group">
+                        <label for="turmaSelect">Selecione a Turma:</label>
+                        <select id="turmaSelect" onchange="handleTurmaChange()">
+                            <option value="">-- Carregando turmas... --</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="attendance-table-container" style="overflow-x: auto;">
+                <h2>Lista de Presença</h2>
+                <table class="database-table attendance-table">
+                    <thead id="fullAttendanceTableHeader">
+                        </thead>
+                    <tbody id="fullAttendanceTableBody">
+                        <tr>
+                            <td colspan="15" style="text-align: center; padding: 20px;">Selecione uma turma para exibir a lista de presença.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="save-attendance-btn-container">
+                <button class="action-btn primary" onclick="saveAllAttendance()">Salvar Presença</button>
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+    
+    <script>
+        let allClasses = [];
+        let allStudents = [];
+        let allAttendance = [];
+        let studentsInSelectedTurma = [];
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            showLoading();
+            try {
+                [allStudents, allClasses, allAttendance] = await Promise.all([
+                    window.fetchStudents(),
+                    window.fetchClasses(),
+                    window.fetchAttendanceRecords()
+                ]);
+                populateTurmaSelect();
+            } catch (error) {
+                console.error('Erro ao carregar dados iniciais:', error);
+                showGlobalMessageModal('Erro Crítico', 'Não foi possível carregar os dados do diário. Tente recarregar a página.');
+            } finally {
+                hideLoading();
+            }
+        });
+
+        function populateTurmaSelect() {
+            const selectElement = document.getElementById('turmaSelect');
+            const turmas = [...new Set(allStudents.map(student => student.turma))].sort();
+            
+            selectElement.innerHTML = '<option value="">Selecione uma turma</option>';
+            turmas.forEach(turma => {
+                const option = document.createElement('option');
+                option.value = turma;
+                option.textContent = turma;
+                selectElement.appendChild(option);
+            });
+        }
+
+        // *** FUNÇÃO PRINCIPAL MODIFICADA ***
+        function handleTurmaChange() {
+            const selectedTurma = document.getElementById('turmaSelect').value;
+            const tableHeader = document.getElementById('fullAttendanceTableHeader');
+            const tableBody = document.getElementById('fullAttendanceTableBody');
+
+            if (!selectedTurma) {
+                tableHeader.innerHTML = '';
+                tableBody.innerHTML = '<tr><td colspan="15" style="text-align: center; padding: 20px;">Selecione uma turma para exibir a lista de presença.</td></tr>';
+                return;
+            }
+
+            // Filtra os alunos da turma selecionada
+            studentsInSelectedTurma = allStudents
+                .filter(student => student.turma === selectedTurma)
+                .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+            
+            // *** NOVA LÓGICA ***
+            // Filtra as aulas para incluir apenas as que foram 'completed' (realizadas)
+            const completedClasses = allClasses.filter(cls => cls.status === 'completed');
+
+            // Passa a lista de aulas filtrada para as funções que constroem a tabela
+            buildTableHeader(completedClasses);
+            buildTableBody(completedClasses);
+        }
+
+        // *** FUNÇÃO MODIFICADA ***
+        // Agora aceita uma lista de aulas como parâmetro
+        function buildTableHeader(classesToDisplay) {
+            const tableHeader = document.getElementById('fullAttendanceTableHeader');
+            let headerHtml = `<tr><th class="name-header">Nome do Aluno</th>`;
+
+            if (classesToDisplay.length === 0) {
+                headerHtml += `<th>Nenhuma aula realizada encontrada</th>`;
+            } else {
+                classesToDisplay.forEach(cls => {
+                    const date = new Date(cls.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                    headerHtml += `<th>${cls.title}<br>(${date})</th>`;
+                });
+            }
+
+            headerHtml += `
+                    <th class="total-present">Total P</th>
+                    <th class="total-justified">Total FJ</th>
+                    <th class="total-absent">Total F</th>
+                </tr>
+            `;
+            tableHeader.innerHTML = headerHtml;
+        }
+
+        // *** FUNÇÃO MODIFICADA ***
+        // Agora também aceita a lista de aulas como parâmetro
+        function buildTableBody(classesToDisplay) {
+            const tableBody = document.getElementById('fullAttendanceTableBody');
+            tableBody.innerHTML = '';
+            const colspan = classesToDisplay.length + 4;
+
+            if (studentsInSelectedTurma.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="${colspan}" style="text-align: center;">Nenhum aluno encontrado nesta turma.</td></tr>`;
+                return;
+            }
+             if (classesToDisplay.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="${colspan}" style="text-align: center; padding: 20px;">Ainda não há aulas marcadas como "Realizada" para esta turma.</td></tr>`;
+                return;
+            }
+
+
+            studentsInSelectedTurma.forEach(student => {
+                const row = document.createElement('tr');
+                let rowHtml = `<td class="student-name">${student.nome}</td>`;
+                
+                let totalP = 0, totalFj = 0, totalF = 0;
+
+                // Itera apenas sobre as aulas filtradas
+                classesToDisplay.forEach(cls => {
+                    const record = allAttendance.find(rec => rec.student_id == student.id && rec.class_id == cls.id);
+                    const status = record ? record.attendance_status : 'F';
+
+                    if (status === 'P') totalP++;
+                    else if (status === 'Fj') totalFj++;
+                    else if (status === 'F') totalF++;
+                    
+                    rowHtml += `
+                        <td class="attendance-cell ${getStatusClass(status)}">
+                            <select class="attendance-status-select" data-student-id="${student.id}" data-class-id="${cls.id}">
+                                <option value="P" ${status === 'P' ? 'selected' : ''}>P</option>
+                                <option value="F" ${status === 'F' ? 'selected' : ''}>F</option>
+                                <option value="Fj" ${status === 'Fj' ? 'selected' : ''}>Fj</option>
+                            </select>
+                        </td>
+                    `;
+                });
+                
+                rowHtml += `
+                    <td class="total-present">${totalP}</td>
+                    <td class="total-justified">${totalFj}</td>
+                    <td class="total-absent">${totalF}</td>
+                `;
+                
+                row.innerHTML = rowHtml;
+                tableBody.appendChild(row);
+            });
+        }
+        
+        function getStatusClass(status) {
+            switch (status) {
+                case 'P': return 'present';
+                case 'F': return 'absent';
+                case 'Fj': return 'justified';
+                default: return '';
+            }
+        }
+
+        // Modificação de Disponibilidade: Função para salvar todas as presenças de uma vez
+        async function saveAllAttendance() {
+            const selectedTurma = document.getElementById('turmaSelect').value;
+            if (!selectedTurma) {
+                // Usa a função global definida em script.js para mostrar mensagens
+                showGlobalMessageModal('Atenção', 'Por favor, selecione uma turma antes de salvar.');
+                return;
+            }
+
+            // 1. Agrupar todos os dados de presença em um único array.
+            const attendanceDataBatch = [];
+            document.querySelectorAll('#fullAttendanceTableBody .attendance-status-select').forEach(select => {
+                attendanceDataBatch.push({
+                    student_id: parseInt(select.dataset.studentId),
+                    class_id: parseInt(select.dataset.classId),
+                    attendance_status: select.value
+                });
+            });
+
+            if (attendanceDataBatch.length === 0) {
+                showGlobalMessageModal('Informação', 'Nenhuma presença para salvar.');
+                return;
+            }
+
+            // Usa a função global definida em script.js para mostrar o loading
+            showLoading();
+            try {
+                // 2. Enviar o array completo em UMA ÚNICA requisição para o novo endpoint de lote.
+                // Certifique-se que API_BASE_URL está definida (geralmente em script.js ou no início do script da página).
+                const response = await fetch(`${API_BASE_URL}/attendance/batch-update`, { // Novo endpoint
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(attendanceDataBatch) // Envia o array inteiro
+                });
+
+                const data = await response.json(); // Espera a resposta do backend
+
+                if (response.ok && data.success) {
+                    showGlobalMessageModal('Sucesso', `Presença para a turma inteira salva com sucesso! (${data.message})`);
+
+                    // Recarrega os dados de presença do backend APÓS salvar com sucesso
+                    allAttendance = await window.fetchAttendanceRecords(); // Usa a função fetch global
+
+                    // Redesenha apenas o corpo da tabela para manter o cabeçalho e refletir os dados salvos
+                    // Assumindo que 'allClasses' já está carregado e filtrado corretamente
+                    const completedClasses = allClasses.filter(cls => cls.status === 'completed');
+                    buildTableBody(completedClasses); // Redesenha a tabela com os dados atualizados
+
+                } else {
+                    // A mensagem de erro agora é mais confiável, pois a operação inteira falhou atomicamente.
+                    showGlobalMessageModal('Erro ao Salvar', `Não foi possível salvar os registros de presença. Tente novamente. Detalhes: ${data.message || 'Erro desconhecido.'}`);
+                }
+            } catch (error) {
+                console.error("Erro de rede ao salvar presenças em lote:", error);
+                showGlobalMessageModal('Erro Crítico', 'Ocorreu um erro de rede ou de servidor ao salvar os dados. Verifique sua conexão e tente novamente.');
+            } finally {
+                // Usa a função global definida em script.js para esconder o loading
+                hideLoading();
+            }
+        }
+
+        // Funções auxiliares (logout, whatsapp, etc.)
+        function abrirWhatsApp() {
+            window.open("https://chat.whatsapp.com/GHZuEpQhb5uGFROPWioy9o?mode=ac_c", '_blank');
+        }
+
+        async function logout() {
+            const userId = localStorage.getItem("userId");
+            if (userId) {
+                await fetch(`http://127.0.0.1:5000/logout/${userId}`, { method: 'POST' }).catch(console.error);
+            }
+            localStorage.clear();
+            window.location.href = "index.html";
+        }
+
+        const userAvatar = document.querySelector(".user-avatar");
+        if (userAvatar) {
+            userAvatar.addEventListener("click", () => {
+                if (confirm("Deseja fazer logout?")) logout();
+            });
+            userAvatar.style.cursor = "pointer";
+            userAvatar.title = "Clique para fazer logout";
+        }
+    </script>
+</body>
+</html>

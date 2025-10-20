@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Atividades - Curso de Scratch</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="main-layout">
+        <header class="header">
+            <div class="logo">
+                <img src="img/scratch.png" height="50" width="50" alt="Scratch Logo" id="scratch-logo">
+            </div>
+            <nav>
+                <ul class="nav-menu">
+                    <li id="navAdmin"><a href="admin.html">Administração de Usuários</a></li>
+                    <li id="navBancoDados"><a href="database.html">Banco de Dados</a></li>
+                    <li id="navDiarioClasseProf"><a href="teacher-diary.html">Diário de Classe</a></li>
+                    <li id="navActivitiesProf"><a href="teacher-activities.html" class="active">Atividades</a></li>
+                    <li id="navMateriaisProf"><a href="teacher-materials.html">Materiais</a></li>
+                    
+                    <li class="dropdown">
+                        <a href="#">Links Externos ▼</a>
+                        <div class="dropdown-content">
+                            <a href="https://scratch.mit.edu/" target="_blank">Scratch Website</a>
+                            <a href="https://scratch.mit.edu/projects/editor/" target="_blank">Editor do Scratch</a>
+                            <a href="https://scratch.mit.edu/ideas" target="_blank">Ideias de Projetos</a>
+                            <a href="https://www.youtube.com/results?search_query=scratch+tutorial+português" target="_blank">Tutoriais YouTube</a>
+                            <a href="https://wayground.com/home-v1?lng=pt-BR" target="_blank">Wayground (Quizizz)</a>
+                        </div>
+                    </li>
+                    <li class="dropdown">
+                        <a href="#">Informações ▼</a>
+                        <div class="dropdown-content">
+                            <a href="horario-onibus.html">Horário do Ônibus</a>
+                            <a href="calendario-aulas.html">Calendário das Aulas</a>
+                            <a href="#" onclick="abrirWhatsApp()">Link do grupo do WhatsApp</a>
+                            <a href="endereco-aula.html">Endereço do Local das Aulas</a>
+                            <a href="contato.html">Contato</a>
+                        </div>
+                    </li>
+                </ul>
+            </nav>
+            <div class="user-profile">
+                <div class="user-avatar"><img src="img/icon-user.png" height="40" width="40" alt="Icone do Perfil"></div>
+            </div>
+        </header>
+        
+        <main class="content">
+            <h1 class="page-title">📝 Controle de Atividades</h1>
+            
+            <div class="attendance-controls">
+                <div class="dropdown-group">
+                    <div class="form-group">
+                        <label for="turmaSelect">Selecione a Turma:</label>
+                        <select id="turmaSelect" onchange="handleTurmaChange()">
+                            <option value="">-- Carregando turmas... --</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="attendance-table-container" style="overflow-x: auto;">
+                <h2>Status das Atividades</h2>
+                <table class="database-table">
+                    <thead id="activitiesTableHeader">
+                        </thead>
+                    <tbody id="activitiesTableBody">
+                        <tr>
+                            <td colspan="12" style="text-align: center; padding: 20px;">Selecione uma turma para exibir o status das atividades.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="save-attendance-btn-container">
+                 <button class="action-btn primary" onclick="saveAllActivities()">Salvar Alterações</button>
+            </div>
+        </main>
+    </div>
+    <script src="script.js"></script>
+
+    <script>
+        let allStudents = [];
+        let allActivities = [];
+        let config = {};
+        let studentsInSelectedTurma = [];
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            showLoading();
+            try {
+                // Carrega todos os dados necessários em paralelo
+                [allStudents, allActivities, config] = await Promise.all([
+                    window.fetchStudents(),
+                    window.fetchStudentActivities(),
+                    window.fetchSystemConfig()
+                ]);
+                populateTurmaSelect();
+            } catch (error) {
+                console.error('Erro ao carregar dados iniciais de atividades:', error);
+                showGlobalMessageModal('Erro Crítico', 'Não foi possível carregar os dados de atividades. Tente recarregar a página.');
+            } finally {
+                hideLoading();
+            }
+        });
+
+        function populateTurmaSelect() {
+            const selectElement = document.getElementById('turmaSelect');
+            if (!allStudents || allStudents.length === 0) {
+                selectElement.innerHTML = '<option value="">Nenhum aluno encontrado</option>';
+                return;
+            }
+            const turmas = [...new Set(allStudents.map(student => student.turma))].sort();
+            
+            selectElement.innerHTML = '<option value="">-- Selecione uma turma --</option>';
+            turmas.forEach(turma => {
+                const option = document.createElement('option');
+                option.value = turma;
+                option.textContent = turma;
+                selectElement.appendChild(option);
+            });
+        }
+
+        function handleTurmaChange() {
+            const selectedTurma = document.getElementById('turmaSelect').value;
+            const tableHeader = document.getElementById('activitiesTableHeader');
+            const tableBody = document.getElementById('activitiesTableBody');
+
+            if (!selectedTurma) {
+                tableHeader.innerHTML = '';
+                tableBody.innerHTML = '<tr><td colspan="12" style="text-align: center; padding: 20px;">Selecione uma turma para exibir o status das atividades.</td></tr>';
+                return;
+            }
+
+            studentsInSelectedTurma = allStudents
+                .filter(student => student.turma === selectedTurma)
+                .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+
+            buildActivitiesTableHeader();
+            buildActivitiesTableBody();
+        }
+
+        function buildActivitiesTableHeader() {
+            const tableHeader = document.getElementById('activitiesTableHeader');
+            let headerHtml = `<tr><th class="name-header">Nome do Aluno</th>`;
+
+            for (let i = 1; i <= (config.numberOfActivities || 10); i++) {
+                headerHtml += `<th>Atividade ${i}</th>`;
+            }
+
+            headerHtml += `<th class="total-entregues-cell">Total Entregues</th></tr>`;
+            tableHeader.innerHTML = headerHtml;
+        }
+
+        function buildActivitiesTableBody() {
+            const tableBody = document.getElementById('activitiesTableBody');
+            tableBody.innerHTML = '';
+            const numberOfActivities = config.numberOfActivities || 10;
+            const colspan = numberOfActivities + 2;
+
+            if (studentsInSelectedTurma.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="${colspan}" style="text-align: center;">Nenhum aluno encontrado nesta turma.</td></tr>`;
+                return;
+            }
+
+            studentsInSelectedTurma.forEach(student => {
+                const row = document.createElement('tr');
+                let rowHtml = `<td class="student-name">${student.nome}</td>`;
+                const studentActivities = allActivities.find(act => act.id === student.id);
+                
+                for (let i = 1; i <= numberOfActivities; i++) {
+                    const aulaKey = `aula_${i}`;
+                    const status = studentActivities ? (studentActivities[aulaKey] || 'Pendente') : 'Pendente';
+                    
+                    rowHtml += `
+                        <td class="activity-status-cell ${getStatusClass(status)}">
+                            <select class="activity-status-select" data-student-id="${student.id}" data-aula-col="${aulaKey}">
+                                <option value="Pendente" ${status === 'Pendente' ? 'selected' : ''}>Pendente</option>
+                                <option value="Enviada" ${status === 'Enviada' ? 'selected' : ''}>Enviada</option>
+                                <option value="Verificada" ${status === 'Verificada' ? 'selected' : ''}>Verificada</option>
+                            </select>
+                        </td>
+                    `;
+                }
+                
+                rowHtml += `<td class="total-entregues-cell">${studentActivities ? (studentActivities.total_enviadas || 0) : 0}</td>`;
+                row.innerHTML = rowHtml;
+                tableBody.appendChild(row);
+            });
+        }
+        
+        function getStatusClass(status) {
+            switch (status) {
+                case 'Enviada': return 'submitted';
+                case 'Verificada': return 'verified';
+                case 'Pendente': return 'pending';
+                default: return '';
+            }
+        }
+
+        async function saveAllActivities() {
+            const selectedTurma = document.getElementById('turmaSelect').value;
+            if (!selectedTurma) {
+                showGlobalMessageModal('Atenção', 'Selecione uma turma antes de salvar.');
+                return;
+            }
+
+            const updates = [];
+            document.querySelectorAll('#activitiesTableBody .activity-status-select').forEach(select => {
+                updates.push({
+                    aluno_id: parseInt(select.dataset.studentId),
+                    aula_col: select.dataset.aulaCol,
+                    new_status: select.value
+                });
+            });
+
+            if (updates.length === 0) {
+                showGlobalMessageModal('Informação', 'Nenhuma atividade para salvar.');
+                return;
+            }
+            
+            showLoading();
+            const promises = updates.map(update => window.updateActivityStatus(update.aluno_id, {
+                aula_col: update.aula_col,
+                new_status: update.new_status
+            }));
+
+            try {
+                const results = await Promise.all(promises);
+                const errors = results.filter(res => !res.success);
+
+                if (errors.length === 0) {
+                    showGlobalMessageModal('Sucesso', `Atividades salvas com sucesso para a turma!`);
+                    allActivities = await window.fetchStudentActivities();
+                    buildActivitiesTableBody();
+                } else {
+                    showGlobalMessageModal('Atenção', `Atividades salvas com ${errors.length} erros. Verifique o console.`);
+                }
+            } catch (error) {
+                console.error("Erro ao salvar múltiplas atividades:", error);
+                showGlobalMessageModal('Erro Crítico', 'Ocorreu um erro de rede ao salvar os dados.');
+            } finally {
+                hideLoading();
+            }
+        }
+        
+        function abrirWhatsApp() {
+            window.open("https://chat.whatsapp.com/GHZuEpQhb5uGFROPWioy9o?mode=ac_c", '_blank');
+        }
+
+        async function logout() {
+            const userId = localStorage.getItem("userId");
+            if (userId) {
+                await fetch(`http://127.0.0.1:5000/logout/${userId}`, { method: 'POST' }).catch(console.error);
+            }
+            localStorage.clear();
+            window.location.href = "index.html";
+        }
+
+        const userAvatar = document.querySelector(".user-avatar");
+        if (userAvatar) {
+            userAvatar.addEventListener("click", () => {
+                if (confirm("Deseja fazer logout?")) logout();
+            });
+            userAvatar.style.cursor = "pointer";
+            userAvatar.title = "Clique para fazer logout";
+        }
+    </script>
+</body>
+</html>
