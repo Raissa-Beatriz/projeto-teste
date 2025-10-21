@@ -832,7 +832,7 @@ document.addEventListener("DOMContentLoaded", () => {
   async function sendEditedAlunoToBackend(alunoId, alunoData) { // MODIFICAÇÃO: Adicionado 'async'
     showLoading(); // ADIÇÃO
       try {
-          const response = await fetch(`http://127.0.0.1:5000/alunos/edit/${alunoId}`, { // A URL do seu endpoint Flask (método PUT)
+          const response = await fetch(`${API_BASE_URL}/login`, { // A URL do seu endpoint Flask (método PUT)
               method: 'PUT', // Método HTTP PUT para atualização
               headers: {
                   'Content-Type': 'application/json',
