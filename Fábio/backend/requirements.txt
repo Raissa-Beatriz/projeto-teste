@@ -1,4 +1,4 @@
 Flask
-mysql-connector-python
+psycopg2-binary  # Novo conector para PostgreSQL
 werkzeug
-gunicorn # Servidor WSGI para produção
+gunicorn

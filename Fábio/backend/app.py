@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, send_from_directory, request, make_response
-import mysql.connector
-from mysql.connector import Error
+import psycopg2 
+from psycopg2 import Error
+from psycopg2.extras import RealDictCursor
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
 import random
@@ -8,15 +9,18 @@ import string
 import time
 from werkzeug.utils import secure_filename
 
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
 # Trecho em Fábio/backend/app.py
 app = Flask(__name__, static_folder=os.path.abspath(os.path.join(os.path.dirname(__file__), '../PROJETO_FINAL')), static_url_path='/')
 
 # Configurações do Banco de Dados MySQL
 db_config = {
     'host': os.environ.get('DB_HOST', 'localhost'),
-    'database': os.environ.get('DB_NAME', 'Scratch'),
-    'user': os.environ.get('DB_USER', 'root'),
-    'password': os.environ.get('DB_PASSWORD', '1234')
+    'database': os.environ.get('DB_NAME', 'scratch'),
+    'user': os.environ.get('DB_USER', 'professor'), 
+    'password': os.environ.get('DB_PASSWORD', '1234'),
+    'port': os.environ.get('DB_PORT', '5432')
 }
 
 # Configuração para uploads de materiais
@@ -105,14 +109,31 @@ def db_connection_error_response():
     return make_response(jsonify({'success': False, 'message': 'Erro de conexão com o banco de dados. Tente novamente mais tarde.'}), 503)
 
 def create_db_connection():
-    """Cria e retorna uma conexão com o banco de dados."""
+    """Cria e retorna uma conexão com o banco de dados PostgreSQL."""
     connection = None
     try:
-        connection = mysql.connector.connect(**db_config)
-        if connection.is_connected():
-            print("Conexão com o banco de dados MySQL bem-sucedida!")
+        # Usa a URL completa fornecida pelo Render se disponível, ou o dicionário
+        conn_string = os.environ.get('DATABASE_URL')
+
+        if conn_string:
+            # Conecta usando a URL de Conexão do Render
+            connection = psycopg2.connect(conn_string)
+        else:
+            # Conexão de fallback (pode ser usado para testes locais)
+            connection = psycopg2.connect(
+                host=db_config['host'],
+                database=db_config['database'],
+                user=db_config['user'],
+                password=db_config['password'],
+                port=db_config['port']
+            )
+
+        print("Conexão com o banco de dados PostgreSQL bem-sucedida!")
+        # Configura a conexão para se comportar como o MySQL (opcional, mas útil)
+        connection.autocommit = True 
+
     except Error as e:
-        print(f"Erro ao conectar ao MySQL: {e}")
+        print(f"Erro ao conectar ao PostgreSQL: {e}")
         connection = None
     return connection
 
@@ -165,7 +186,7 @@ def get_alunos():
         return db_connection_error_response()
     alunos = []
     try:
-        cursor = connection.cursor(dictionary=True)
+        cursor = connection.cursor(cursor_factory=RealDictCursor)
         cursor.execute("SELECT id, turma, nome, email, telefone, data_nascimento, rg, cpf, endereco, escolaridade, escola, responsavel FROM alunos")
         alunos = cursor.fetchall()
         for aluno in alunos:
@@ -185,7 +206,7 @@ def get_aluno_by_id(aluno_id):
     aluno = None
     if connection:
         try:
-            cursor = connection.cursor(dictionary=True)
+            cursor = connection.cursor(cursor_factory=RealDictCursor)
             query = "SELECT id, turma, nome, email, telefone, data_nascimento, rg, cpf, endereco, escolaridade, escola, responsavel FROM alunos WHERE id = %s"
             cursor.execute(query, (aluno_id,))
             aluno = cursor.fetchone()
@@ -418,7 +439,7 @@ def get_users():
     users = []
     if connection:
         try:
-            cursor = connection.cursor(dictionary=True)
+            cursor = connection.cursor(cursor_factory=RealDictCursor)
             cursor.execute("SELECT id, username, full_name, role, student_id, last_login, total_logins, online_status FROM users")
             users = cursor.fetchall()
             for user in users:
@@ -437,7 +458,7 @@ def get_user_by_id(user_id):
     user = None
     if connection:
         try:
-            cursor = connection.cursor(dictionary=True)
+            cursor = connection.cursor(cursor_factory=RealDictCursor)
             query = "SELECT id, username, full_name, role, student_id, last_login, total_logins, online_status FROM users WHERE id = %s"
             cursor.execute(query, (user_id,))
             user = cursor.fetchone()
@@ -636,7 +657,7 @@ def login():
     connection = create_db_connection()
     if connection:
         try:
-            cursor = connection.cursor(dictionary=True)
+            cursor = connection.cursor(cursor_factory=RealDictCursor)
             query = "SELECT id, username, password_hash, full_name, role, student_id FROM users WHERE username = %s"
             cursor.execute(query, (username,))
             user = cursor.fetchone()
@@ -700,7 +721,7 @@ def get_classes():
     classes = []
     if connection:
         try:
-            cursor = connection.cursor(dictionary=True)
+            cursor = connection.cursor(cursor_factory=RealDictCursor)
             cursor.execute("SELECT id, title, date, status, description FROM classes ORDER BY date ASC")
             classes = cursor.fetchall()
             for cls in classes:
@@ -720,7 +741,7 @@ def get_class_by_id(class_id):
     class_item = None
     if connection:
         try:
-            cursor = connection.cursor(dictionary=True)
+            cursor = connection.cursor(cursor_factory=RealDictCursor)
             query = "SELECT id, title, date, status, description FROM classes WHERE id = %s"
             cursor.execute(query, (class_id,))
             class_item = cursor.fetchone()
@@ -845,7 +866,7 @@ def get_attendance_records():
     records = []
     if connection:
         try:
-            cursor = connection.cursor(dictionary=True)
+            cursor = connection.cursor(cursor_factory=RealDictCursor)
             query = """
             SELECT ar.id, ar.student_id, a.nome as student_name, ar.class_id, c.title as class_title, ar.attendance_status, ar.recorded_at
             FROM attendance_records ar
@@ -871,7 +892,7 @@ def get_attendance_by_student(student_id):
     records = []
     if connection:
         try:
-            cursor = connection.cursor(dictionary=True)
+            cursor = connection.cursor(cursor_factory=RealDictCursor)
             query = """
             SELECT ar.id, ar.student_id, ar.class_id, c.title as class_title, c.date as class_date, ar.attendance_status, ar.recorded_at
             FROM attendance_records ar
@@ -948,7 +969,7 @@ def delete_attendance_record(record_id):
     connection = create_db_connection()
     if connection:
         try:
-            cursor = connection.cursor(dictionary=True)
+            cursor = connection.cursor(cursor_factory=RealDictCursor)
             
             # Pega o student_id ANTES de deletar para notificar o observer
             cursor.execute("SELECT student_id FROM attendance_records WHERE id = %s", (record_id,))
@@ -992,7 +1013,7 @@ def get_status_alunos():
     statuses = []
     if connection:
         try:
-            cursor = connection.cursor(dictionary=True)
+            cursor = connection.cursor(cursor_factory=RealDictCursor)
             # Juntar com 'alunos' para obter o nome
             query = """
             SELECT sa.id, a.nome as student_name, sa.faltas, sa.situacao
@@ -1017,7 +1038,7 @@ def get_student_status_by_id(student_id):
     status_item = None
     if connection:
         try:
-            cursor = connection.cursor(dictionary=True)
+            cursor = connection.cursor(cursor_factory=RealDictCursor)
             query = """
             SELECT sa.id, sa.faltas, sa.situacao
             FROM status_alunos sa
@@ -1047,7 +1068,7 @@ def get_atividades_alunos():
     activities = []
     if connection:
         try:
-            cursor = connection.cursor(dictionary=True)
+            ccursor = connection.cursor(cursor_factory=RealDictCursor)
             # Juntar com 'alunos' para obter o nome
             query = """
             SELECT aa.*, a.nome as student_name
@@ -1120,7 +1141,7 @@ def get_materials():
     materials = []
     if connection:
         try:
-            cursor = connection.cursor(dictionary=True)
+            cursor = connection.cursor(cursor_factory=RealDictCursor)
             cursor.execute("SELECT id, name, file_type, file_size, upload_date, description, file_path FROM materials ORDER BY upload_date DESC")
             materials = cursor.fetchall()
             for mat in materials:
@@ -1222,7 +1243,7 @@ def delete_material(material_id):
     connection = create_db_connection()
     if connection:
         try:
-            cursor = connection.cursor(dictionary=True)
+            cursor = connection.cursor(cursor_factory=RealDictCursor)
             cursor.execute("SELECT file_path FROM materials WHERE id = %s", (material_id,))
             material = cursor.fetchone()
             

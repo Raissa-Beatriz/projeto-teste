@@ -1,125 +1,131 @@
--- Cria o banco de dados 'scratch' se ele não existir
-CREATE DATABASE IF NOT EXISTS Scratch;
+-- 1. Cria os tipos ENUM como tipos customizados (melhor prática em PG para ENUM)
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'turma_enum') THEN
+        CREATE TYPE turma_enum AS ENUM('25.1 - T1', '25.1 - T2', '25.2 - T1');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'escolaridade_enum') THEN
+        CREATE TYPE escolaridade_enum AS ENUM('8º ano', '9º ano');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'escola_enum') THEN
+        CREATE TYPE escola_enum AS ENUM('Pública', 'Privada');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'role_enum') THEN
+        CREATE TYPE role_enum AS ENUM('student', 'teacher');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'status_enum') THEN
+        CREATE TYPE status_enum AS ENUM('completed', 'current', 'future', 'cancelled');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'attendance_enum') THEN
+        CREATE TYPE attendance_enum AS ENUM('P', 'F', 'Fj');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'situacao_enum') THEN
+        CREATE TYPE situacao_enum AS ENUM('Ativo', 'Desistente');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'atividade_status_enum') THEN
+        CREATE TYPE atividade_status_enum AS ENUM('Pendente', 'Enviada', 'Verificada');
+    END IF;
+END $$;
 
--- Seleciona o banco de dados 'scratch' para uso
-USE scratch;
-
--- 1. Cria a tabela 'alunos' (sua info_alunos) com a estrutura inicial
--- As modificações mais detalhadas de colunas serão feitas em um ALTER TABLE único abaixo.
+-- 2. Cria a tabela 'alunos' (sua info_alunos)
 CREATE TABLE IF NOT EXISTS alunos (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    turma VARCHAR(50), -- Será alterado para ENUM posteriormente
-    nome VARCHAR(255) NOT NULL,
-    email VARCHAR(255) UNIQUE,
-    telefone VARCHAR(20),
+    id SERIAL PRIMARY KEY, -- Equivalente a INT AUTO_INCREMENT
+    turma turma_enum NOT NULL, 
+    nome VARCHAR(70) NOT NULL,
+    email VARCHAR(50) UNIQUE,
+    telefone VARCHAR(11) UNIQUE,
     data_nascimento DATE,
-    rg VARCHAR(20),
-    cpf VARCHAR(15) UNIQUE,
-    endereco VARCHAR(255),
-    escolaridade VARCHAR(100), -- Será alterado para ENUM posteriormente
-    escola VARCHAR(255), -- Será alterado para ENUM posteriormente
-    responsavel VARCHAR(255)
+    rg VARCHAR(9) UNIQUE,
+    cpf VARCHAR(11) UNIQUE NOT NULL,
+    endereco VARCHAR(100),
+    escolaridade escolaridade_enum NOT NULL, 
+    escola escola_enum NOT NULL, 
+    responsavel VARCHAR(70) NOT NULL
 );
 
--- Insere um aluno inicial na tabela 'alunos'
-INSERT INTO alunos (turma, nome, email, telefone, data_nascimento, rg, cpf, endereco, escolaridade, escola, responsavel) VALUES
-('25.1 - T1', 'Fulano de Tal', 'fulanodetal@gmail.com', '81912345678', '2010-01-01', '1234567', '12345678910', 'Rua dos Bobos - nº 0', '8º ano', 'Pública', 'Fulana de Tal'),
-('25.1 - T1', 'João Oliveira', 'joao.oliveira@gmail.com', '81933334444', '2010-08-25', '2345678', '23456789012', 'Rua das Palmeiras, nº 20', '8º ano', 'Pública', 'Carlos Oliveira')
-ON DUPLICATE KEY UPDATE nome=VALUES(nome); -- Evita erro se o aluno já existir por CPF ou email
-
-select * from users;
-
--- 2. Cria a tabela 'users'
+-- 3. Cria a tabela 'users'
 CREATE TABLE IF NOT EXISTS users (
-	student_id INT UNIQUE,
-    username VARCHAR(50) NOT NULL UNIQUE PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
+    student_id INT UNIQUE,
+    username VARCHAR(50) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(255),
-    role ENUM('student', 'teacher') NOT NULL,
-    last_login DATETIME,
+    role role_enum NOT NULL,
+    last_login TIMESTAMP WITH TIME ZONE, -- Equivalente a DATETIME
     total_logins INT DEFAULT 0,
     online_status VARCHAR(20) DEFAULT 'Offline',
     FOREIGN KEY (student_id) REFERENCES alunos(id) ON DELETE SET NULL
 );
 
--- Insere usuários iniciais na tabela 'users'
-INSERT INTO users (student_id, username, password_hash, full_name, role, last_login, total_logins, online_status) VALUES
-(NULL, 'programacao', 'scrypt:32768:8:1$MQN1vNMTRKLalFNe$60a78c8315739dc1198bedab10e6e7bbabad29e7c12917d748306fea4ca1f8cc721a7ae616e6ff842c792bffb3872e4949cf5759a96b6feecaba6b7c97678632', 'Prof. 2', 'teacher', NULL, 0, 'Offline'),
-(NULL, 'professor', 'scrypt:32768:8:1$t7OyXy7NDbPAqplM$a0e9a7ba25f8308f5b92e54b357a6a9db5dfe6c6bbef4f0238443c39c1e2e701dae69b710dbe1debd86eedd6bfc46e7c2c01f69c9c77fdfb8c940f05696007bc', 'Prof. 1', 'teacher', NULL, 0, 'Offline')
-ON DUPLICATE KEY UPDATE password_hash=VALUES(password_hash), full_name=VALUES(full_name), role=VALUES(role); -- Evita erro se o usuário já existir por username
-
--- 3. Cria a tabela 'classes'
+-- 4. Cria a tabela 'classes'
 CREATE TABLE IF NOT EXISTS classes (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
     date DATE NOT NULL,
-    status ENUM('completed', 'current', 'future', 'cancelled') NOT NULL,
+    status status_enum NOT NULL,
     description TEXT
 );
 
--- 4. Cria a tabela 'attendance_records'
+-- 5. Cria a tabela 'attendance_records'
 CREATE TABLE IF NOT EXISTS attendance_records (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     student_id INT NOT NULL,
     class_id INT NOT NULL,
-    attendance_status ENUM('P', 'F', 'Fj') NOT NULL, -- P=Presente, F=Falta, Fj=Falta Justificada
-    recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (student_id, class_id), -- Garante um registro por aluno por aula
+    attendance_status attendance_enum NOT NULL, 
+    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP, -- Equivalente a DATETIME DEFAULT CURRENT_TIMESTAMP
+    UNIQUE (student_id, class_id),
     FOREIGN KEY (student_id) REFERENCES alunos(id) ON DELETE CASCADE,
     FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE
 );
 
--- 5. Cria a tabela 'materials'
+-- 6. Cria a tabela 'materials'
 CREATE TABLE IF NOT EXISTS materials (
-    id INT AUTO_INCREMENT PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
-    file_type VARCHAR(100), -- Ex: 'application/pdf'
-    file_size BIGINT, -- Tamanho em bytes
-    upload_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    file_type VARCHAR(100),
+    file_size BIGINT,
+    upload_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     description TEXT,
-    file_path VARCHAR(255) -- Caminho ou identificador do arquivo armazenado
+    file_path VARCHAR(255)
 );
 
--- 7. Consolida todas as modificações da tabela 'alunos' em um único ALTER TABLE
--- Isso garante as restrições de VARCHAR, UNIQUE, NOT NULL e ENUM
-ALTER TABLE alunos
-MODIFY COLUMN turma ENUM('25.1 - T1', '25.1 - T2', '25.2 - T1') NOT NULL,
-MODIFY COLUMN nome VARCHAR(70) NOT NULL,
-MODIFY COLUMN email VARCHAR(50) UNIQUE,
-MODIFY COLUMN telefone VARCHAR(11) UNIQUE,
-MODIFY COLUMN rg VARCHAR(9) UNIQUE,
-MODIFY COLUMN cpf VARCHAR(11) UNIQUE NOT NULL,
-MODIFY COLUMN endereco VARCHAR(100),
-MODIFY COLUMN escolaridade ENUM('8º ano', '9º ano') NOT NULL,
-MODIFY COLUMN escola ENUM('Pública', 'Privada') NOT NULL,
-MODIFY COLUMN responsavel VARCHAR(70) NOT NULL;
-
--- 8. Cria a tabela 'status_alunos' (agora uma tabela separada para status por aluno)
+-- 7. Cria a tabela 'status_alunos'
 CREATE TABLE IF NOT EXISTS status_alunos (
-    id INT PRIMARY KEY, -- Chave Primária e Estrangeira
+    id INT PRIMARY KEY REFERENCES alunos(id) ON DELETE CASCADE,
     faltas SMALLINT DEFAULT 0,
-    situacao ENUM('Ativo', 'Desistente') DEFAULT 'Ativo',
-    FOREIGN KEY (id) REFERENCES alunos(id) ON DELETE CASCADE
+    situacao situacao_enum DEFAULT 'Ativo'
 );
 
--- 9. Cria a tabela 'atividades_alunos'
+-- 8. Cria a tabela 'atividades_alunos'
 CREATE TABLE IF NOT EXISTS atividades_alunos (
-    id INT PRIMARY KEY, -- Chave Primária e Estrangeira
-    aula_1 ENUM('Pendente', 'Enviada', 'Verificada') DEFAULT 'Pendente',
-    aula_2 ENUM('Pendente', 'Enviada', 'Verificada') DEFAULT 'Pendente',
-    aula_3 ENUM('Pendente', 'Enviada', 'Verificada') DEFAULT 'Pendente',
-    aula_4 ENUM('Pendente', 'Enviada', 'Verificada') DEFAULT 'Pendente',
-    aula_5 ENUM('Pendente', 'Enviada', 'Verificada') DEFAULT 'Pendente',
-    aula_6 ENUM('Pendente', 'Enviada', 'Verificada') DEFAULT 'Pendente',
-    aula_7 ENUM('Pendente', 'Enviada', 'Verificada') DEFAULT 'Pendente',
-    aula_8 ENUM('Pendente', 'Enviada', 'Verificada') DEFAULT 'Pendente',
-    aula_9 ENUM('Pendente', 'Enviada', 'Verificada') DEFAULT 'Pendente',
-    aula_10 ENUM('Pendente', 'Enviada', 'Verificada') DEFAULT 'Pendente',
-    total_enviadas SMALLINT DEFAULT 0,
-    FOREIGN KEY (id) REFERENCES alunos(id) ON DELETE CASCADE
+    id INT PRIMARY KEY REFERENCES alunos(id) ON DELETE CASCADE,
+    aula_1 atividade_status_enum DEFAULT 'Pendente',
+    aula_2 atividade_status_enum DEFAULT 'Pendente',
+    aula_3 atividade_status_enum DEFAULT 'Pendente',
+    aula_4 atividade_status_enum DEFAULT 'Pendente',
+    aula_5 atividade_status_enum DEFAULT 'Pendente',
+    aula_6 atividade_status_enum DEFAULT 'Pendente',
+    aula_7 atividade_status_enum DEFAULT 'Pendente',
+    aula_8 atividade_status_enum DEFAULT 'Pendente',
+    aula_9 atividade_status_enum DEFAULT 'Pendente',
+    aula_10 atividade_status_enum DEFAULT 'Pendente',
+    total_enviadas SMALLINT DEFAULT 0
 );
 
--- 10. Inicia a inserção dos 30 novos alunos na turma '25.2 - T1'
+-- INSERÇÕES DE DADOS (usando ON CONFLICT (coluna_unique) DO NOTHING/UPDATE para evitar duplicatas em PG)
+
+-- Insere o aluno 'Fulano de Tal' e 'João Oliveira'
+INSERT INTO alunos (turma, nome, email, telefone, data_nascimento, rg, cpf, endereco, escolaridade, escola, responsavel) VALUES
+('25.1 - T1', 'Fulano de Tal', 'fulanodetal@gmail.com', '81912345678', '2010-01-01', '1234567', '12345678910', 'Rua dos Bobos - nº 0', '8º ano', 'Pública', 'Fulana de Tal'),
+('25.1 - T1', 'João Oliveira', 'joao.oliveira@gmail.com', '81933334444', '2010-08-25', '2345678', '23456789012', 'Rua das Palmeiras, nº 20', '8º ano', 'Pública', 'Carlos Oliveira')
+ON CONFLICT (cpf) DO NOTHING; 
+
+-- Insere usuários iniciais na tabela 'users' (Professores)
+INSERT INTO users (student_id, username, password_hash, full_name, role) VALUES
+(NULL, 'programacao', 'scrypt:32768:8:1$MQN1vNMTRKLalFNe$60a78c8315739dc1198bedab10e6e7bbabad29e7c12917d748306fea4ca1f8cc721a7ae616e6ff842c792bffb3872e4949cf5759a96b6feecaba6b7c97678632', 'Prof. 2', 'teacher'),
+(NULL, 'professor', 'scrypt:32768:8:1$t7OyXy7NDbPAqplM$a0e9a7ba25f8308f5b92e54b357a6a9db5dfe6c6bbef4f0238443c39c1e2e701dae69b710dbe1debd86eedd6bfc46e7c2c01f69c9c77fdfb8c940f05696007bc', 'Prof. 1', 'teacher')
+ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash, full_name = EXCLUDED.full_name, role = EXCLUDED.role; 
+
+-- Inserção dos 30 novos alunos
 INSERT INTO alunos (turma, nome, email, telefone, data_nascimento, rg, cpf, endereco, escolaridade, escola, responsavel) VALUES
 ('25.2 - T1', 'Ana Silva', 'ana.silva@email.com', '81910000001', '2011-02-01', '1100001', '10000000001', 'Rua das Flores, 1', '8º ano', 'Pública', 'Marcos Silva'),
 ('25.2 - T1', 'Bruno Costa', 'bruno.costa@email.com', '81910000002', '2011-03-10', '1100002', '10000000002', 'Avenida Principal, 2', '9º ano', 'Pública', 'Carla Costa'),
@@ -150,20 +156,13 @@ INSERT INTO alunos (turma, nome, email, telefone, data_nascimento, rg, cpf, ende
 ('25.2 - T1', 'Arthur Dantas', 'arthur.dantas@email.com', '81910000027', '2011-08-16', '1100027', '10000000027', 'Rua do Cais, 27', '8º ano', 'Pública', 'Miguel Dantas'),
 ('25.2 - T1', 'Bárbara Queiroz', 'barbara.queiroz@email.com', '81910000028', '2010-04-22', '1100028', '10000000028', 'Rua da Ponte, 28', '8º ano', 'Privada', 'Nicole Queiroz'),
 ('25.2 - T1', 'Caio Rangel', 'caio.rangel@email.com', '81910000029', '2011-09-29', '1100029', '10000000029', 'Avenida do Forte, 29', '9º ano', 'Pública', 'Otávio Rangel')
-ON DUPLICATE KEY UPDATE nome=VALUES(nome);
+ON CONFLICT (cpf) DO NOTHING;
 
--- ---------------------------------------------------------------------------------
--- ATUALIZA AS TABELAS DEPENDENTES (status_alunos e atividades_alunos)
--- ---------------------------------------------------------------------------------
--- (Este bloco permanece o mesmo, mas é necessário para garantir 
--- que os novos alunos tenham entradas nas tabelas de status e atividades)
-
--- Popula 'status_alunos' com os novos IDs (usando os valores DEFAULT)
+-- Popula 'status_alunos' e 'atividades_alunos' (usando ON CONFLICT (id) DO NOTHING para evitar duplicatas em PG)
 INSERT INTO status_alunos (id)
 SELECT id FROM alunos
-WHERE id NOT IN (SELECT id FROM status_alunos);
+ON CONFLICT (id) DO NOTHING;
 
--- Popula 'atividades_alunos' com os novos IDs (usando os valores DEFAULT)
 INSERT INTO atividades_alunos (id)
 SELECT id FROM alunos
-WHERE id NOT IN (SELECT id FROM atividades_alunos);
+ON CONFLICT (id) DO NOTHING;
