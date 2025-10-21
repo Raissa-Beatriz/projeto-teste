@@ -116,8 +116,11 @@ def create_db_connection():
         conn_string = os.environ.get('DATABASE_URL')
 
         if conn_string:
-            # Conecta usando a URL de Conexão do Render
-            connection = psycopg2.connect(conn_string)
+            if '?sslmode=require' not in conn_string:
+                conn_string += '?sslmode=require'
+
+            print(f"Tentando conectar com: {conn_string}") # LOG PARA DEBUG
+            connection = psycopg2.connect(conn_string) # Tenta conectar com a URL ajustada
         else:
             # Conexão de fallback (pode ser usado para testes locais)
             connection = psycopg2.connect(
