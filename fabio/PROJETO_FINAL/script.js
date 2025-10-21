@@ -187,7 +187,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       try {
         // ADIÇÃO: Requisição para o endpoint de login do backend
-        const response = await fetch('http://127.0.0.1:5000/login', {
+        const response = await fetch(API_BASE_URL + '/login',{
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -324,7 +324,7 @@ document.addEventListener("DOMContentLoaded", () => {
   window.fetchAlunosFromBackend = async function() { // MODIFICAÇÃO: Tornada global e async
     showLoading(); // ADIÇÃO
       try {
-          const response = await fetch('http://127.0.0.1:5000/alunos');
+          const response = await fetch(API_BASE_URL + '/alunos');
           if (!response.ok) {
               throw new Error(`Erro HTTP! Status: ${response.status}`);
           }
@@ -394,7 +394,7 @@ document.addEventListener("DOMContentLoaded", () => {
   window.fetchStudentOverallStatusFromBackend = async function() {
     showLoading(); // ADIÇÃO
       try {
-          const response = await fetch('http://127.0.0.1:5000/status_alunos'); // MODIFICAÇÃO: Nova rota
+          const response = await fetch(API_BASE_URL + '/status_aluno',); // MODIFICAÇÃO: Nova rota
           if (!response.ok) {
               throw new Error(`Erro HTTP! Status: ${response.status}`);
           }
@@ -445,7 +445,7 @@ document.addEventListener("DOMContentLoaded", () => {
   window.fetchLoginAlunosFromBackend = async function() {
     showLoading(); // ADIÇÃO
       try {
-          const response = await fetch('http://127.0.0.1:5000/users');
+          const response = await fetch(API_BASE_URL + '/users',);
           if (!response.ok) {
               throw new Error(`Erro HTTP! Status: ${response.status}`);
           }
@@ -497,7 +497,7 @@ document.addEventListener("DOMContentLoaded", () => {
   window.fetchAtividadesAlunosFromBackend = async function() {
     showLoading(); // ADIÇÃO
     try {
-        const response = await fetch('http://127.0.0.1:5000/atividades_alunos'); // Nova rota para atividades
+        const response = await fetch(API_BASE_URL + '/atividades_alunos',); // Nova rota para atividades
         if (!response.ok) {
             throw new Error(`Erro HTTP! Status: ${response.status}`);
         }
@@ -695,7 +695,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       try {
-          const response = await fetch('http://127.0.0.1:5000/alunos/add', {
+          const response = await fetch(API_BASE_URL + '/login/add', {
               method: 'POST',
               headers: {
                   'Content-Type': 'application/json',
@@ -731,7 +731,7 @@ document.addEventListener("DOMContentLoaded", () => {
       showConfirmModal('Confirmar Exclusão', `Tem certeza que deseja excluir o aluno com ID ${alunoId}?`, async () => {
           showLoading(); // ADIÇÃO
           try {
-              const response = await fetch(`http://127.0.0.1:5000/alunos/delete/${alunoId}`, {
+              const response = await fetch(`${API_BASE_URL}/alunos/delete/${alunoId}`, {
                   method: 'DELETE',
               });
               const data = await response.json();
@@ -758,7 +758,7 @@ document.addEventListener("DOMContentLoaded", () => {
   window.editAluno = async function(alunoId) { // MODIFICAÇÃO: Adicionado 'async'
     showLoading(); // ADIÇÃO
       try {
-          const response = await fetch(`http://127.0.0.1:5000/alunos/${alunoId}`);
+          const response = await fetch(`${API_BASE_URL}/alunos/${alunoId}`);
           if (!response.ok) {
               throw new Error(`Erro HTTP! Status: ${response.status}`);
           }

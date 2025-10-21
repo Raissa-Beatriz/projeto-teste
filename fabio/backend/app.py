@@ -1344,6 +1344,3 @@ def batch_update_attendance():
         if connection.is_connected():
             cursor.close()
             connection.close()
-
-if __name__ == '__main__':
-    app.run(debug=True, port=5000)
