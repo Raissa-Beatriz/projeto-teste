@@ -101,13 +101,15 @@
         async function loadTeacherDashboardStats() {
             try {
                 // 1. Contar Alunos Matriculados
-                const studentsResponse = await fetch('http://127.0.0.1:5000/alunos');
+                // CORREÇÃO 1
+                const studentsResponse = await fetch(API_BASE_URL + '/alunos');
                 if (!studentsResponse.ok) throw new Error('Erro ao buscar alunos.');
                 const students = await studentsResponse.json();
                 document.getElementById('totalStudents').textContent = students.length;
 
                 // 2. Contar Aulas Ministradas (status 'completed')
-                const classesResponse = await fetch('http://127.0.0.1:5000/classes');
+                // CORREÇÃO 2
+                const classesResponse = await fetch(API_BASE_URL + '/classes');
                 if (!classesResponse.ok) throw new Error('Erro ao buscar aulas.');
                 const classes = await classesResponse.json();
                 const completedClassesCount = classes.filter(cls => cls.status === 'completed').length;
@@ -116,7 +118,8 @@
                 // 3. Calcular Frequência Média
                 // Para calcular a frequência média, precisamos do total de presenças e do total de aulas para todos os alunos.
                 // Isso pode ser feito buscando todos os registros de presença e todas as aulas.
-                const attendanceRecordsResponse = await fetch('http://127.0.0.1:5000/attendance');
+                // CORREÇÃO 3
+                const attendanceRecordsResponse = await fetch(API_BASE_URL + '/attendance');
                 if (!attendanceRecordsResponse.ok) throw new Error('Erro ao buscar registros de presença.');
                 const allAttendanceRecords = await attendanceRecordsResponse.json();
 
@@ -160,7 +163,8 @@
             const userId = localStorage.getItem("userId");
             if (userId) {
                 try {
-                    await fetch(`http://127.0.0.1:5000/logout/${userId}`, {
+                    // CORREÇÃO 4: Template Literal para Logout
+                    await fetch(`${API_BASE_URL}/logout/${userId}`, {
                         method: 'POST',
                     });
                     console.log('Status online atualizado para offline.');
@@ -178,5 +182,3 @@
         }
 
     </script>
-</body>
-</html>

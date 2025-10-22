@@ -205,7 +205,7 @@
             scheduleContainer.innerHTML = ''; // Limpa o conteúdo existente
             showLoading();
             try {
-                const response = await fetch('http://127.0.0.1:5000/classes');
+                const response = await fetch(API_BASE_URL + '/classes');
                 if (!response.ok) {
                     throw new Error(`Erro HTTP! Status: ${response.status}`);
                 }
@@ -301,7 +301,7 @@
             
             showLoading();
             try {
-                const response = await fetch(`http://127.0.0.1:5000/classes/${selectedClassId}`);
+                const response = await fetch(`${API_BASE_URL}/classes/${selectedClassId}`);
                 if (!response.ok) {
                     throw new Error(`Erro HTTP! Status: ${response.status}`);
                 }
@@ -350,7 +350,7 @@
             }
             showLoading();
             try {
-                const response = await fetch(`http://127.0.0.1:5000/classes/delete/${selectedClassId}`, {
+                const response = await fetch(`${API_BASE_URL}/classes/delete/${selectedClassId}`, {
                     method: 'DELETE',
                 });
                 const data = await response.json();
@@ -383,11 +383,11 @@
             }
 
             const classData = { title, date, status, description };
-            let url = 'http://127.0.0.1:5000/classes/add';
+            let url = `${API_BASE_URL}/classes/add`;
             let method = 'POST';
 
             if (selectedClassId) { // Se selectedClassId não for null, estamos editando
-                url = `http://127.0.0.1:5000/classes/edit/${selectedClassId}`;
+                url = `${API_BASE_URL}/classes/edit/${selectedClassId}`;
                 method = 'PUT';
             }
 
@@ -443,7 +443,7 @@
             const userId = localStorage.getItem("userId");
             if (userId) {
                 try {
-                    await fetch(`http://127.0.0.1:5000/logout/${userId}`, {
+                    await fetch(`${API_BASE_URL}/logout/${userId}`, {
                         method: 'POST',
                     });
                     console.log('Status online atualizado para offline.');

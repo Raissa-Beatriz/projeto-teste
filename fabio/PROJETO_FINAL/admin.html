@@ -193,7 +193,7 @@
             tbody.innerHTML = `<tr><td colspan="9" style="text-align: center;">Carregando usuários...</td></tr>`;
             showLoading();
             try {
-                const response = await fetch('http://127.0.0.1:5000/users');
+                const response = await fetch(API_BASE_URL + '/users')
                 if (!response.ok) {
                     throw new Error(`Erro HTTP! Status: ${response.status}`);
                 }
@@ -273,7 +273,7 @@
 
                 showLoading();
                 try {
-                    const response = await fetch('http://127.0.0.1:5000/users/add', {
+                    const response = await fetch(API_BASE_URL + '/users/add', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -302,7 +302,7 @@
             currentEditingUserId = userId; // Armazena o ID do usuário
             showLoading();
             try {
-                const response = await fetch(`http://127.0.0.1:5000/users/${userId}`);
+                const response = await fetch(`${API_BASE_URL}/users/${userId}`);
                 if (!response.ok) {
                     throw new Error(`Erro HTTP! Status: ${response.status}`);
                 }
@@ -349,7 +349,7 @@
 
                 showLoading();
                 try {
-                    const response = await fetch(`http://127.0.0.1:5000/users/edit/${currentEditingUserId}`, {
+                    const response = await fetch(`${API_BASE_URL}/users/edit/${currentEditingUserId}`, {
                         method: 'PUT',
                         headers: {
                             'Content-Type': 'application/json',
@@ -396,7 +396,7 @@
 
             showLoading();
             try {
-                const response = await fetch(`http://127.0.0.1:5000/users/delete/${currentDeletingUserId}`, {
+                const response = await fetch(`${API_BASE_URL}/users/delete/${currentDeletingUserId}`, {
                     method: 'DELETE',
                 });
                 const data = await response.json();

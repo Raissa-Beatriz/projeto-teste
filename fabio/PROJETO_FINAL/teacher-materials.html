@@ -427,6 +427,34 @@
                 });
             }
         }
+
+        // Funções de navegação e logout
+        function abrirWhatsApp() {
+            const whatsappLink = "https://chat.whatsapp.com/GHZuEpQhb5uGFROPWioy9o?mode=ac_c";
+            window.open(whatsappLink, '_blank');
+        }
+
+        async function logout() {
+            const userId = localStorage.getItem("userId");
+            if (userId) {
+                try {
+                    // CORREÇÃO: Template Literal
+                    await fetch(`${API_BASE_URL}/logout/${userId}`, {
+                        method: 'POST',
+                    });
+                    console.log('Status online atualizado para offline.');
+                } catch (error) {
+                    console.error('Erro ao atualizar status de logout:', error);
+                }
+            }
+            localStorage.removeItem("isLoggedIn");
+            localStorage.removeItem("userId");
+            localStorage.removeItem("username");
+            localStorage.removeItem("userRole");
+            localStorage.removeItem("userName");
+            localStorage.removeItem("userStudentId");
+            window.location.href = "index.html";
+        }
     </script>
 </body>
 </html>

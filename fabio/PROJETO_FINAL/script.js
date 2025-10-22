@@ -186,8 +186,8 @@ document.addEventListener("DOMContentLoaded", () => {
       showLoading(); // ADIÇÃO: Mostra o spinner
 
       try {
-        // ADIÇÃO: Requisição para o endpoint de login do backend
-        const response = await fetch(API_BASE_URL + '/login',{
+        // CORREÇÃO 1: Utiliza API_BASE_URL para o login
+        const response = await fetch(API_BASE_URL + '/login', { 
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -324,7 +324,8 @@ document.addEventListener("DOMContentLoaded", () => {
   window.fetchAlunosFromBackend = async function() { // MODIFICAÇÃO: Tornada global e async
     showLoading(); // ADIÇÃO
       try {
-          const response = await fetch(API_BASE_URL + '/alunos');
+          // CORREÇÃO 2: Utiliza API_BASE_URL
+          const response = await fetch(API_BASE_URL + '/alunos'); 
           if (!response.ok) {
               throw new Error(`Erro HTTP! Status: ${response.status}`);
           }
@@ -394,7 +395,8 @@ document.addEventListener("DOMContentLoaded", () => {
   window.fetchStudentOverallStatusFromBackend = async function() {
     showLoading(); // ADIÇÃO
       try {
-          const response = await fetch(API_BASE_URL + '/status_aluno',); // MODIFICAÇÃO: Nova rota
+          // CORREÇÃO 3: Utiliza API_BASE_URL
+          const response = await fetch(API_BASE_URL + '/status_alunos'); 
           if (!response.ok) {
               throw new Error(`Erro HTTP! Status: ${response.status}`);
           }
@@ -445,7 +447,8 @@ document.addEventListener("DOMContentLoaded", () => {
   window.fetchLoginAlunosFromBackend = async function() {
     showLoading(); // ADIÇÃO
       try {
-          const response = await fetch(API_BASE_URL + '/users',);
+          // CORREÇÃO 4: Utiliza API_BASE_URL
+          const response = await fetch(API_BASE_URL + '/users'); 
           if (!response.ok) {
               throw new Error(`Erro HTTP! Status: ${response.status}`);
           }
@@ -497,7 +500,8 @@ document.addEventListener("DOMContentLoaded", () => {
   window.fetchAtividadesAlunosFromBackend = async function() {
     showLoading(); // ADIÇÃO
     try {
-        const response = await fetch(API_BASE_URL + '/atividades_alunos',); // Nova rota para atividades
+        // CORREÇÃO 5: Utiliza API_BASE_URL
+        const response = await fetch(API_BASE_URL + '/atividades_alunos'); // Nova rota para atividades
         if (!response.ok) {
             throw new Error(`Erro HTTP! Status: ${response.status}`);
         }
@@ -695,7 +699,8 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       try {
-          const response = await fetch(API_BASE_URL + '/login/add', {
+          // CORREÇÃO 6: Utiliza API_BASE_URL para adicionar aluno
+          const response = await fetch(API_BASE_URL + '/alunos/add', { 
               method: 'POST',
               headers: {
                   'Content-Type': 'application/json',
@@ -731,6 +736,7 @@ document.addEventListener("DOMContentLoaded", () => {
       showConfirmModal('Confirmar Exclusão', `Tem certeza que deseja excluir o aluno com ID ${alunoId}?`, async () => {
           showLoading(); // ADIÇÃO
           try {
+              // CORREÇÃO 7: Utiliza Template Literal com API_BASE_URL
               const response = await fetch(`${API_BASE_URL}/alunos/delete/${alunoId}`, {
                   method: 'DELETE',
               });
@@ -758,7 +764,8 @@ document.addEventListener("DOMContentLoaded", () => {
   window.editAluno = async function(alunoId) { // MODIFICAÇÃO: Adicionado 'async'
     showLoading(); // ADIÇÃO
       try {
-          const response = await fetch(`${API_BASE_URL}/alunos/${alunoId}`);
+          // CORREÇÃO 8: Utiliza Template Literal com API_BASE_URL
+          const response = await fetch(`${API_BASE_URL}/alunos/${alunoId}`); 
           if (!response.ok) {
               throw new Error(`Erro HTTP! Status: ${response.status}`);
           }
@@ -832,7 +839,8 @@ document.addEventListener("DOMContentLoaded", () => {
   async function sendEditedAlunoToBackend(alunoId, alunoData) { // MODIFICAÇÃO: Adicionado 'async'
     showLoading(); // ADIÇÃO
       try {
-          const response = await fetch(`${API_BASE_URL}/login`, { // A URL do seu endpoint Flask (método PUT)
+          // CORREÇÃO 9: Utiliza Template Literal com API_BASE_URL
+          const response = await fetch(`${API_BASE_URL}/alunos/edit/${alunoId}`, { 
               method: 'PUT', // Método HTTP PUT para atualização
               headers: {
                   'Content-Type': 'application/json',
@@ -874,7 +882,8 @@ document.addEventListener("DOMContentLoaded", () => {
           if (userId) {
               showLoading(); // ADIÇÃO: Adiciona o spinner ao sair
               try {
-                  await fetch(`http://127.0.0.1:5000/logout/${userId}`, { // ADIÇÃO: Chama o endpoint de logout
+                  // CORREÇÃO 10: Utiliza Template Literal com API_BASE_URL
+                  await fetch(`${API_BASE_URL}/logout/${userId}`, { 
                       method: 'POST',
                   });
                   console.log('Status online atualizado para offline.');

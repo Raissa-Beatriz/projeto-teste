@@ -103,7 +103,7 @@
 
             try {
                 // 1. Buscar dados do aluno
-                const studentResponse = await fetch(`http://127.0.0.1:5000/alunos/${studentId}`);
+                const studentResponse = await fetch(`${API_BASE_URL}/alunos/${studentId}`);
                 if (!studentResponse.ok) {
                     throw new Error(`Erro HTTP ao buscar dados do aluno! Status: ${studentResponse.status}`);
                 }
@@ -111,7 +111,7 @@
                 console.log('Dados do aluno:', studentData);
 
                 // ADIÇÃO: 2. Buscar status do aluno (faltas)
-                const studentStatusResponse = await fetch(`http://127.0.0.1:5000/status_alunos/${studentId}`);
+                const studentStatusResponse = await fetch(`${API_BASE_URL}/status_alunos/${studentId}`);
                 if (!studentStatusResponse.ok) {
                     // Se o status não for encontrado (404), pode ser um aluno novo sem faltas
                     if (studentStatusResponse.status === 404) {
@@ -127,7 +127,7 @@
 
 
                 // 3. Buscar todas as aulas (para cabeçalhos de data)
-                const classesResponse = await fetch('http://127.0.0.1:5000/classes');
+                const classesResponse = await fetch(API_BASE_URL + '/classes');
                 if (!classesResponse.ok) {
                     throw new Error(`Erro HTTP ao buscar aulas! Status: ${classesResponse.status}`);
                 }
@@ -138,7 +138,7 @@
 
 
                 // 4. Buscar registros de presença do aluno (P, F, Fj por aula)
-                const attendanceResponse = await fetch(`http://127.0.0.1:5000/attendance/student/${studentId}`);
+                const attendanceResponse = await fetch(`${API_BASE_URL}/attendance/student/${studentId}`);
                 if (!attendanceResponse.ok) {
                     throw new Error(`Erro HTTP ao buscar presença do aluno! Status: ${attendanceResponse.status}`);
                 }
@@ -260,7 +260,7 @@
             const userId = localStorage.getItem("userId");
             if (userId) {
                 try {
-                    await fetch(`http://127.0.0.1:5000/logout/${userId}`, {
+                    await fetch(`${API_BASE_URL}/logout/${userId}`, {
                         method: 'POST',
                     });
                     console.log('Status online atualizado para offline.');
