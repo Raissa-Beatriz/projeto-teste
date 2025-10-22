@@ -59,60 +59,85 @@
         </main>
     </div>
     <script src="script.js"></script>
-    <script>
-        
-// Carregar materiais do localStorage
-function loadMaterials() {
+<script>
+    
+// Carregar materiais do servidor
+async function loadMaterials() {
+    showLoading();
     const materialsList = document.getElementById('materialsList');
-    const savedMaterials = localStorage.getItem('courseMaterials');
-    const materials = savedMaterials ? JSON.parse(savedMaterials) : [];
-    const userRole = localStorage.getItem('userRole');
+    materialsList.innerHTML = ''; // Limpa o conteúdo
     
-    materialsList.innerHTML = '';
-    
-    if (materials.length === 0) {
-        materialsList.innerHTML = '<p style="text-align: center; color: #666; padding: 40px;">Nenhum material disponível ainda.</p>';
-        return;
+    try {
+        // Busca a lista de materiais do backend (Rota /materials)
+        const response = await fetch(API_BASE_URL + '/materials');
+        if (!response.ok) throw new Error('Falha ao buscar materiais da API.');
+        const materials = await response.json();
+        
+        if (materials.length === 0) {
+            materialsList.innerHTML = '<p style="text-align: center; color: #666; padding: 40px;">Nenhum material disponível ainda.</p>';
+            return;
+        }
+        
+        materials.forEach(material => {
+            const materialDiv = document.createElement('div');
+            materialDiv.className = 'lesson-item';
+            
+            // Note que usamos material.file_path para o download
+            materialDiv.innerHTML = `
+                <div class="lesson-title">${material.name}</div>
+                <div class="lesson-actions">
+                    <button class="action-btn" onclick="downloadMaterial('${material.file_path}')">📥</button>
+                </div>
+            `;
+            materialsList.appendChild(materialDiv);
+        });
+    } catch(error) {
+        console.error("Erro ao carregar materiais do servidor:", error);
+        materialsList.innerHTML = '<p style="text-align: center; color: red; padding: 40px;">Erro ao carregar materiais. Verifique a conexão.</p>';
+    } finally {
+        hideLoading();
     }
-    
-    materials.forEach(material => {
-        const materialDiv = document.createElement('div');
-        materialDiv.className = 'lesson-item';
-        materialDiv.innerHTML = `
-            <div class="lesson-title">${material.name}</div>
-            <div class="lesson-actions">
-                <button class="action-btn" onclick="downloadMaterial('${material.id}')">📥</button>
-                <button class="action-btn edit-btn" onclick="editMaterial('${material.id}')" style="display: ${userRole === 'teacher' ? 'inline-flex' : 'none'}">✏️</button>
-            </div>
-        `;
-        materialsList.appendChild(materialDiv);
-    });
 }
 
-// Função para download de material
-function downloadMaterial(materialId) {
-    const savedMaterials = localStorage.getItem('courseMaterials');
-    const materials = savedMaterials ? JSON.parse(savedMaterials) : [];
-    const material = materials.find(m => m.id === materialId);
-    
-    if (material) {
-        // Criar link de download
-        const link = document.createElement('a');
-        link.href = material.data;
-        link.download = material.name;
-        link.click();
-        
-        alert(`Baixando: ${material.name}`);
-    }
+// Função para download de material (Aponta para a rota de download da API)
+function downloadMaterial(filename) {
+    // A rota /materials/download/ serve o arquivo diretamente do servidor
+    const downloadUrl = `${API_BASE_URL}/materials/download/${filename}`;
+    window.open(downloadUrl, '_blank');
 }
 
 // Carregar materiais quando a página carrega
 document.addEventListener('DOMContentLoaded', () => {
-    const userRole = localStorage.getItem('userRole');
     loadMaterials();
     
-    // Recarregar materiais a cada 5 segundos para sincronizar
-    setInterval(loadMaterials, 5000);
+    // Funções auxiliares (manter)
+    function abrirWhatsApp() {
+        const whatsappLink = "https://chat.whatsapp.com/GHZuEpQhb5uGFROPWioy9o?mode=ac_c";
+        window.open(whatsappLink, '_blank');
+    }
+    // Função logout é copiada do script.js e usa API_BASE_URL
+    async function logout() {
+        const userId = localStorage.getItem("userId");
+        if (userId) {
+            await fetch(`${API_BASE_URL}/logout/${userId}`, { method: 'POST' }).catch(console.error);
+        }
+        localStorage.removeItem("isLoggedIn");
+        localStorage.removeItem("userId");
+        localStorage.removeItem("username");
+        localStorage.removeItem("userRole");
+        localStorage.removeItem("userName");
+        localStorage.removeItem("userStudentId");
+        window.location.href = "index.html";
+    }
+
+    const userAvatar = document.querySelector(".user-avatar")
+    if (userAvatar) {
+        userAvatar.addEventListener("click", () => {
+            if (confirm("Deseja fazer logout?")) logout();
+        });
+        userAvatar.style.cursor = "pointer";
+        userAvatar.title = "Clique para fazer logout";
+    }
 });
 </script>
 </body>

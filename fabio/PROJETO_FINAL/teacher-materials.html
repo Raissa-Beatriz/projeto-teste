@@ -104,171 +104,141 @@
     </div>
     
     <script src="script.js"></script>
-    <script>
-        let currentEditingId = null;
+<script>
+    let currentEditingId = null;
+    let allMaterials = []; // Armazena a lista de materiais do servidor
+
+    // Configurar área de upload
+    document.addEventListener('DOMContentLoaded', () => {
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
         
-        // Configurar área de upload
-        document.addEventListener('DOMContentLoaded', () => {
-            const uploadArea = document.getElementById('uploadArea');
-            const fileInput = document.getElementById('fileInput');
-            
-            // Click para selecionar arquivo
-            uploadArea.addEventListener('click', () => {
-                fileInput.click();
-            });
-            
-            // Drag and drop
-            uploadArea.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                uploadArea.classList.add('drag-over');
-            });
-            
-            uploadArea.addEventListener('dragleave', () => {
-                uploadArea.classList.remove('drag-over');
-            });
-            
-            uploadArea.addEventListener('drop', (e) => {
-                e.preventDefault();
-                uploadArea.classList.remove('drag-over');
-                const files = e.dataTransfer.files;
-                handleFiles(files);
-            });
-            
-            // Seleção de arquivo
-            fileInput.addEventListener('change', (e) => {
-                handleFiles(e.target.files);
-            });
-            
-            loadMaterials();
+        // Click para selecionar arquivo
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
         });
         
-        // Processar arquivos selecionados
-        function handleFiles(files) {
-            const uploadQueue = document.getElementById('uploadQueue');
-            Array.from(files).forEach(file => {
-                if (validateFile(file)) {
-                    // Cria um contêiner para o progresso de cada arquivo
-                    const uploadItem = document.createElement('div');
-                    uploadItem.className = 'upload-queue-item';
-                    uploadItem.innerHTML = `
-                        <p>Fazendo upload de <strong>${file.name}</strong>...</p>
-                        <div class="progress-bar">
-                            <div class="progress-fill" style="width: 0%;"></div>
-                        </div>
-                        <p class="progress-info">Iniciando...</p>
-                    `;
-                    uploadQueue.appendChild(uploadItem);
+        // Drag and drop events (mantidos)
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('drag-over');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+            handleFiles(e.dataTransfer.files);
+        });
+        
+        // Seleção de arquivo
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+        
+        loadMaterials();
+    });
+    
+    // Processar arquivos selecionados
+    function handleFiles(files) {
+        const uploadQueue = document.getElementById('uploadQueue');
+        Array.from(files).forEach(file => {
+            if (validateFile(file)) {
+                // Cria um contêiner para o progresso de cada arquivo
+                const uploadItem = document.createElement('div');
+                uploadItem.className = 'upload-queue-item';
+                uploadItem.innerHTML = `
+                    <p>Fazendo upload de <strong>${file.name}</strong>...</p>
+                    <div class="progress-bar"><div class="progress-fill" style="width: 0%;"></div></div>
+                    <p class="progress-info">Iniciando...</p>
+                `;
+                uploadQueue.appendChild(uploadItem);
 
-                    const progressFill = uploadItem.querySelector('.progress-fill');
-                    const progressInfo = uploadItem.querySelector('.progress-info');
-                    uploadFile(file, progressFill, progressInfo, uploadItem);
-                }
+                const progressFill = uploadItem.querySelector('.progress-fill');
+                const progressInfo = uploadItem.querySelector('.progress-info');
+                uploadFile(file, progressFill, progressInfo, uploadItem);
+            }
+        });
+    }
+    
+    // Validar arquivo (mantido)
+    function validateFile(file) {
+        const allowedTypes = [
+            'application/pdf', 'application/vnd.ms-powerpoint', 
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'text/plain'
+        ];
+        const maxSize = 50 * 1024 * 1024; // 50MB
+        
+        if (!allowedTypes.includes(file.type)) {
+            showGlobalMessageModal('Atenção', `Formato não suportado: ${file.name}`);
+            return false;
+        }
+        
+        if (file.size > maxSize) {
+            showGlobalMessageModal('Atenção', `Arquivo muito grande: ${file.name} (máx. 50MB)`);
+            return false;
+        }
+        return true;
+    }
+    
+    // Upload real do arquivo para a API (via FormData)
+    async function uploadFile(file, progressFillElement, progressInfoElement, uploadItem) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('name', file.name);
+        
+        progressInfoElement.textContent = 'Enviando para o servidor...';
+        progressFillElement.style.width = '10%';
+        showLoading();
+        
+        try {
+            const response = await fetch(API_BASE_URL + '/materials/upload', {
+                method: 'POST',
+                body: formData, // Envia o FormData sem cabeçalho Content-Type
+                // Não simula progresso, espera a resposta final do servidor
             });
-        }
-        
-        // Validar arquivo
-        function validateFile(file) {
-            const allowedTypes = [
-                'application/pdf',
-                'application/vnd.ms-powerpoint',
-                'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-                'application/msword',
-                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                'text/plain'
-            ];
             
-            const maxSize = 50 * 1024 * 1024; // 50MB
+            progressFillElement.style.width = '80%';
+            const data = await response.json();
             
-            if (!allowedTypes.includes(file.type)) {
-                showGlobalMessageModal('Atenção', `Formato não suportado: ${file.name}`);
-                return false;
+            if (data.success) {
+                progressFillElement.style.width = '100%';
+                progressInfoElement.textContent = 'Upload concluído e registrado!';
+                showGlobalMessageModal('Sucesso', `✅ ${file.name} foi enviado e salvo com sucesso!`);
+                loadMaterials();
+            } else {
+                showGlobalMessageModal('Erro', `Erro ao salvar material: ${data.message || 'Erro desconhecido.'}`);
             }
-            
-            if (file.size > maxSize) {
-                showGlobalMessageModal('Atenção', `Arquivo muito grande: ${file.name} (máx. 50MB)`);
-                return false;
-            }
-            
-            return true;
+        } catch (error) {
+            console.error('Erro de upload:', error);
+            showGlobalMessageModal('Erro de Rede', 'Não foi possível conectar ao servidor para upload.');
+        } finally {
+            hideLoading();
+            setTimeout(() => { 
+                if (uploadItem) uploadItem.remove(); 
+            }, 2000);
         }
+    }
+    
+    // Carregar materiais (Buscando do BD)
+    async function loadMaterials() {
+        showLoading();
+        const materialsList = document.getElementById('materialsList');
+        materialsList.innerHTML = '';
         
-        // Upload do arquivo
-        function uploadFile(file, progressFillElement, progressInfoElement, uploadItem) {
-            const reader = new FileReader();
+        try {
+            const response = await fetch(API_BASE_URL + '/materials');
+            if (!response.ok) throw new Error('Falha ao buscar materiais da API.');
+            allMaterials = await response.json(); // Salva a lista globalmente
             
-            reader.onload = function(e) {
-                const uniqueId = Date.now().toString() + Math.random().toString(36).substr(2, 9);
-                const material = {
-                    id: uniqueId,
-                    name: file.name,
-                    type: file.type,
-                    size: file.size,
-                    data: e.target.result,
-                    uploadDate: new Date().toISOString(),
-                    description: ''
-                };
-                
-                saveMaterial(material);
-                
-                // Simular progresso e tempo de conclusão
-                const startTime = Date.now();
-                let progress = 0;
-                const totalSteps = 10;
-                const interval = setInterval(() => {
-                    progress += 10;
-                    progressFillElement.style.width = progress + '%';
-                    
-                    const elapsedTime = (Date.now() - startTime) / 1000; // Tempo em segundos
-                    const estimatedTotalTime = elapsedTime / (progress / 100);
-                    const timeRemaining = estimatedTotalTime - elapsedTime;
-                    
-                    if (progress < 100) {
-                        progressInfoElement.textContent = `Progresso: ${progress}% - Tempo restante: aprox. ${timeRemaining.toFixed(1)}s`;
-                    } else {
-                        progressInfoElement.textContent = 'Upload concluído!';
-                    }
-                    
-                    if (progress >= 100) {
-                        clearInterval(interval);
-                        setTimeout(() => {
-                            // Encontrar o elemento pai e removê-lo após o upload
-                            if (uploadItem) {
-                                uploadItem.remove();
-                            }
-                            showGlobalMessageModal('Sucesso', `✅ ${file.name} foi enviado com sucesso!`);
-                            loadMaterials();
-                        }, 500);
-                    }
-                }, 100);
-            };
-            
-            reader.readAsDataURL(file);
-        }
-        
-        // Salvar material no localStorage
-        function saveMaterial(material) {
-            const savedMaterials = localStorage.getItem('courseMaterials');
-            const materials = savedMaterials ? JSON.parse(savedMaterials) : [];
-            
-            materials.push(material);
-            localStorage.setItem('courseMaterials', JSON.stringify(materials));
-        }
-        
-        // Carregar materiais
-        function loadMaterials() {
-            const materialsList = document.getElementById('materialsList');
-            const savedMaterials = localStorage.getItem('courseMaterials');
-            const materials = savedMaterials ? JSON.parse(savedMaterials) : [];
-            
-            materialsList.innerHTML = '';
-            
-            if (materials.length === 0) {
+            if (allMaterials.length === 0) {
                 materialsList.innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-icon">📁</div>
-                        <p>Nenhum material enviado ainda</p>
-                        <p class="empty-subtitle">Faça upload do primeiro arquivo para começar</p>
-                    </div>
+                    <div class="empty-state"><div class="empty-icon">📁</div><p>Nenhum material enviado ainda</p><p class="empty-subtitle">Faça upload do primeiro arquivo para começar</p></div>
                 `;
                 updateStats(0, 0);
                 return;
@@ -276,185 +246,172 @@
             
             let totalSize = 0;
             
-            materials.forEach(material => {
-                totalSize += material.size;
+            allMaterials.forEach(material => {
+                totalSize += material.file_size || 0;
                 
                 const materialCard = document.createElement('div');
                 materialCard.className = 'material-card';
                 materialCard.innerHTML = `
-                    <div class="material-icon">${getFileIcon(material.type)}</div>
+                    <div class="material-icon">${getFileIcon(material.file_type)}</div>
                     <div class="material-info">
                         <div class="material-name">${material.name}</div>
                         <div class="material-meta">
-                            ${formatFileSize(material.size)} • ${formatDate(material.uploadDate)}
+                            ${formatFileSize(material.file_size || 0)} • ${formatDate(material.upload_date)}
                         </div>
                         ${material.description ? `<div class="material-description">${material.description}</div>` : ''}
                     </div>
                     <div class="material-actions">
-                        <button class="action-btn small" onclick="downloadMaterial('${material.id}')" title="Download">📥</button>
+                        <button class="action-btn small" onclick="downloadMaterial('${material.file_path}')" title="Download">📥</button>
                         <button class="action-btn small" onclick="editMaterial('${material.id}')" title="Editar">✏️</button>
-                        <button class="action-btn small danger" onclick="confirmDelete('${material.id}')" title="Excluir">🗑️</button>
+                        <button class="action-btn small danger" onclick="confirmDelete('${material.id}', '${material.name}')" title="Excluir">🗑️</button>
                     </div>
                 `;
                 materialsList.appendChild(materialCard);
             });
             
-            updateStats(materials.length, totalSize);
+            updateStats(allMaterials.length, totalSize);
+        } catch (error) {
+            console.error('Erro ao carregar materiais:', error);
+            showGlobalMessageModal('Erro de Sincronização', 'Não foi possível carregar a lista de materiais do servidor.');
+        } finally {
+            hideLoading();
+        }
+    }
+    
+    // Download de material (Aponta para a rota de download da API)
+    function downloadMaterial(filename) {
+        // Usa a rota do Flask para servir o arquivo
+        const downloadUrl = `${API_BASE_URL}/materials/download/${filename}`;
+        window.open(downloadUrl, '_blank');
+    }
+    
+    // Editar material (Preenche o modal)
+    function editMaterial(materialId) {
+        const material = allMaterials.find(m => m.id === materialId);
+        
+        if (material) {
+            currentEditingId = materialId;
+            document.getElementById('editName').value = material.name;
+            document.getElementById('editDescription').value = material.description || '';
+            document.getElementById('editModal').classList.remove('hidden');
+        }
+    }
+    
+    // Salvar edição (PUT para a API)
+    async function saveEdit() {
+        if (!currentEditingId) return;
+        
+        const newName = document.getElementById('editName').value.trim();
+        const newDescription = document.getElementById('editDescription').value.trim();
+        
+        if (!newName) {
+            showGlobalMessageModal('Atenção', 'Nome do arquivo é obrigatório!');
+            return;
         }
         
-        // Atualizar estatísticas
-        function updateStats(count, totalSize) {
-            document.getElementById('materialsCount').textContent = `${count} arquivo${count !== 1 ? 's' : ''}`;
-            document.getElementById('totalSize').textContent = formatFileSize(totalSize);
-        }
+        const updateData = { name: newName, description: newDescription };
         
-        // Obter ícone do arquivo
-        function getFileIcon(type) {
-            if (type.includes('pdf')) return '📄';
-            if (type.includes('presentation') || type.includes('powerpoint')) return '📊';
-            if (type.includes('word') || type.includes('document')) return '📝';
-            if (type.includes('text')) return '📃';
-            return '📁';
-        }
-        
-        // Formatar tamanho do arquivo
-        function formatFileSize(bytes) {
-            if (bytes === 0) return '0 B';
-            const k = 1024;
-            const sizes = ['B', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
-        }
-        
-        // Formatar data
-        function formatDate(dateString) {
-            const date = new Date(dateString);
-            return date.toLocaleDateString('pt-BR');
-        }
-        
-        // Download de material
-        function downloadMaterial(materialId) {
-            const savedMaterials = localStorage.getItem('courseMaterials');
-            const materials = savedMaterials ? JSON.parse(savedMaterials) : [];
-            const material = materials.find(m => m.id === materialId);
+        showLoading();
+        try {
+            const response = await fetch(`${API_BASE_URL}/materials/edit/${currentEditingId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updateData),
+            });
+            const data = await response.json();
             
-            if (material) {
-                const link = document.createElement('a');
-                link.href = material.data;
-                link.download = material.name;
-                link.click();
-            }
-        }
-        
-        // Editar material
-        function editMaterial(materialId) {
-            const savedMaterials = localStorage.getItem('courseMaterials');
-            const materials = savedMaterials ? JSON.parse(savedMaterials) : [];
-            const material = materials.find(m => m.id === materialId);
-            
-            if (material) {
-                currentEditingId = materialId;
-                document.getElementById('editName').value = material.name;
-                document.getElementById('editDescription').value = material.description || '';
-                document.getElementById('editModal').classList.remove('hidden');
-            }
-        }
-        
-        // Fechar modal de edição
-        function closeEditModal() {
-            document.getElementById('editModal').classList.add('hidden');
-            currentEditingId = null;
-        }
-        
-        // Salvar edição
-        function saveEdit() {
-            if (!currentEditingId) return;
-            
-            const newName = document.getElementById('editName').value.trim();
-            const newDescription = document.getElementById('editDescription').value.trim();
-            
-            if (!newName) {
-                showGlobalMessageModal('Atenção', 'Nome do arquivo é obrigatório!');
-                return;
-            }
-            
-            const savedMaterials = localStorage.getItem('courseMaterials');
-            const materials = savedMaterials ? JSON.parse(savedMaterials) : [];
-            const materialIndex = materials.findIndex(m => m.id === currentEditingId);
-            
-            if (materialIndex !== -1) {
-                materials[materialIndex].name = newName;
-                materials[materialIndex].description = newDescription;
-                localStorage.setItem('courseMaterials', JSON.stringify(materials));
-                
-                showGlobalMessageModal('Sucesso', '✅ Material atualizado com sucesso!');
+            if (data.success) {
+                showGlobalMessageModal('Sucesso', '✅ Material atualizado com sucesso no servidor!');
                 closeEditModal();
                 loadMaterials();
+            } else {
+                showGlobalMessageModal('Erro', `Falha ao atualizar material: ${data.message}`);
             }
+        } catch (error) {
+            showGlobalMessageModal('Erro de Rede', 'Erro ao salvar alterações no servidor.');
+        } finally {
+            hideLoading();
         }
-        
-        // Confirmar exclusão
-        function confirmDelete(materialId) {
-            const savedMaterials = localStorage.getItem('courseMaterials');
-            const materials = savedMaterials ? JSON.parse(savedMaterials) : [];
-            const material = materials.find(m => m.id === materialId);
+    }
+    
+    // Confirmar exclusão (Abre o modal de confirmação)
+    function confirmDelete(materialId, materialName) {
+        showConfirmModal('Confirmar Exclusão', `Tem certeza que deseja excluir "${materialName}"?`, () => {
+            deleteMaterial(materialId);
+        });
+    }
+    
+    // Excluir material (DELETE para a API)
+    async function deleteMaterial(materialId) {
+        showLoading();
+        try {
+            const response = await fetch(`${API_BASE_URL}/materials/delete/${materialId}`, {
+                method: 'DELETE',
+            });
+            const data = await response.json();
             
-            if (material) {
-                showConfirmModal('Confirmar Exclusão', `Tem certeza que deseja excluir "${material.name}"?`, () => {
-                    const updatedMaterials = materials.filter(m => m.id !== materialId);
-                    localStorage.setItem('courseMaterials', JSON.stringify(updatedMaterials));
-                    
-                    showGlobalMessageModal('Sucesso', '🗑️ Material excluído com sucesso!');
-                    loadMaterials();
-                });
+            if (data.success) {
+                showGlobalMessageModal('Sucesso', '🗑️ Material excluído com sucesso do servidor!');
+                closeEditModal();
+                loadMaterials();
+            } else {
+                showGlobalMessageModal('Erro', `Falha ao excluir material: ${data.message}`);
             }
+        } catch (error) {
+            showGlobalMessageModal('Erro de Rede', 'Erro ao excluir material no servidor.');
+        } finally {
+            hideLoading();
         }
-        
-        // Excluir material (do modal)
-        function deleteMaterial() {
-            if (currentEditingId) {
-                const savedMaterials = localStorage.getItem('courseMaterials');
-                const materials = savedMaterials ? JSON.parse(savedMaterials) : [];
-                const material = materials.find(m => m.id === currentEditingId);
+    }
+    
+    // --- Funções Auxiliares (Mantidas) ---
+    function closeEditModal() {
+        document.getElementById('editModal').classList.add('hidden');
+        currentEditingId = null;
+    }
+    
+    function getFileIcon(type) {
+        if (type.includes('pdf')) return '📄';
+        if (type.includes('presentation') || type.includes('powerpoint')) return '📊';
+        if (type.includes('word') || type.includes('document')) return '📝';
+        if (type.includes('text')) return '📃';
+        return '📁';
+    }
 
-                showConfirmModal('Confirmar Exclusão', `Tem certeza que deseja excluir "${material.name}"?`, () => {
-                    const updatedMaterials = materials.filter(m => m.id !== currentEditingId);
-                    localStorage.setItem('courseMaterials', JSON.stringify(updatedMaterials));
-                    
-                    showGlobalMessageModal('Sucesso', '🗑️ Material excluído com sucesso!');
-                    closeEditModal();
-                    loadMaterials();
-                });
-            }
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+    
+    function formatDate(dateString) {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('pt-BR');
+    }
+    
+    function abrirWhatsApp() {
+        window.open("https://chat.whatsapp.com/GHZuEpQhb5uGFROPWioy9o?mode=ac_c", '_blank');
+    }
+    
+    async function logout() {
+        const userId = localStorage.getItem("userId");
+        if (userId) {
+            await fetch(`${API_BASE_URL}/logout/${userId}`, { method: 'POST' }).catch(console.error);
         }
+        localStorage.clear();
+        window.location.href = "index.html";
+    }
 
-        // Funções de navegação e logout
-        function abrirWhatsApp() {
-            const whatsappLink = "https://chat.whatsapp.com/GHZuEpQhb5uGFROPWioy9o?mode=ac_c";
-            window.open(whatsappLink, '_blank');
-        }
-
-        async function logout() {
-            const userId = localStorage.getItem("userId");
-            if (userId) {
-                try {
-                    // CORREÇÃO: Template Literal
-                    await fetch(`${API_BASE_URL}/logout/${userId}`, {
-                        method: 'POST',
-                    });
-                    console.log('Status online atualizado para offline.');
-                } catch (error) {
-                    console.error('Erro ao atualizar status de logout:', error);
-                }
-            }
-            localStorage.removeItem("isLoggedIn");
-            localStorage.removeItem("userId");
-            localStorage.removeItem("username");
-            localStorage.removeItem("userRole");
-            localStorage.removeItem("userName");
-            localStorage.removeItem("userStudentId");
-            window.location.href = "index.html";
-        }
-    </script>
+    const userAvatar = document.querySelector(".user-avatar");
+    if (userAvatar) {
+        userAvatar.addEventListener("click", () => {
+            if (confirm("Deseja fazer logout?")) logout();
+        });
+        userAvatar.style.cursor = "pointer";
+        userAvatar.title = "Clique para fazer logout";
+    }
+</script>
 </body>
 </html>
