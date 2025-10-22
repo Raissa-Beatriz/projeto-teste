@@ -79,12 +79,17 @@ class StudentStatusObserver(Observer):
             # Define a situação com base no número de faltas (ex: 3 faltas = Desistente)
             situacao = 'Desistente' if total_absences >= 3 else 'Ativo'
 
+            # Usa INSERT ... ON CONFLICT DO UPDATE para a tabela status_alunos
+            # Assumindo que a restrição UNIQUE (ou PRIMARY KEY) está na coluna 'id'
             update_status_query = """
                 INSERT INTO status_alunos (id, faltas, situacao)
                 VALUES (%s, %s, %s)
-                ON DUPLICATE KEY UPDATE faltas = VALUES(faltas), situacao = VALUES(situacao)
+                ON CONFLICT (id) DO UPDATE SET
+                    faltas = EXCLUDED.faltas,
+                    situacao = EXCLUDED.situacao
             """
             cursor.execute(update_status_query, (student_id, total_absences, situacao))
+            
             connection.commit()
             print(f"OBSERVER: Status do aluno {student_id} atualizado. Faltas: {total_absences}, Situação: {situacao}")
             
@@ -1313,11 +1318,13 @@ def batch_update_attendance():
             if not all([student_id, class_id, status]):
                 raise ValueError(f"Registro inválido encontrado: {record}")
 
-            # Usar INSERT ... ON DUPLICATE KEY UPDATE para ser eficiente
+            # Usar INSERT ... ON CONFLICT DO UPDATE para PostgreSQL
+            # Assumindo que a restrição UNIQUE está em (student_id, class_id)
             query = """
                 INSERT INTO attendance_records (student_id, class_id, attendance_status)
                 VALUES (%s, %s, %s)
-                ON DUPLICATE KEY UPDATE attendance_status = VALUES(attendance_status)
+                ON CONFLICT (student_id, class_id) DO UPDATE SET
+                    attendance_status = EXCLUDED.attendance_status
             """
             cursor.execute(query, (student_id, class_id, status))
             
