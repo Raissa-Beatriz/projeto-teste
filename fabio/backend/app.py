@@ -2,6 +2,7 @@ from flask import Flask, jsonify, send_from_directory, request, make_response
 import psycopg2 
 from psycopg2 import Error
 from psycopg2.extras import RealDictCursor
+from psycopg2 import errors # NOVO: Necessário para tratar erros específicos do PG
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
 import random
@@ -14,7 +15,7 @@ DATABASE_URL = os.environ.get('DATABASE_URL')
 # Trecho em Fábio/backend/app.py
 app = Flask(__name__, static_folder=os.path.abspath(os.path.join(os.path.dirname(__file__), '../PROJETO_FINAL')), static_url_path='/')
 
-# Configurações do Banco de Dados MySQL
+# Configurações do Banco de Dados PostgreSQL (usadas como fallback se DATABASE_URL falhar)
 db_config = {
     'host': os.environ.get('DB_HOST', 'localhost'),
     'database': os.environ.get('DB_NAME', 'scratch'),
@@ -79,10 +80,11 @@ class StudentStatusObserver(Observer):
             # Define a situação com base no número de faltas (ex: 3 faltas = Desistente)
             situacao = 'Desistente' if total_absences >= 3 else 'Ativo'
 
+            # CORREÇÃO: Usando ON CONFLICT (id) DO UPDATE SET para PostgreSQL
             update_status_query = """
                 INSERT INTO status_alunos (id, faltas, situacao)
                 VALUES (%s, %s, %s)
-                ON DUPLICATE KEY UPDATE faltas = VALUES(faltas), situacao = VALUES(situacao)
+                ON CONFLICT (id) DO UPDATE SET faltas = EXCLUDED.faltas, situacao = EXCLUDED.situacao
             """
             cursor.execute(update_status_query, (student_id, total_absences, situacao))
             connection.commit()
@@ -112,17 +114,18 @@ def create_db_connection():
     """Cria e retorna uma conexão com o banco de dados PostgreSQL."""
     connection = None
     try:
-        # Usa a URL completa fornecida pelo Render se disponível, ou o dicionário
         conn_string = os.environ.get('DATABASE_URL')
 
         if conn_string:
-            if '?sslmode=require' not in conn_string:
+            # Lógica para garantir SSL/TLS em conexão externa (se a URL for externa)
+            if 'sslmode=' not in conn_string:
+                # Se for o Render, adiciona o parâmetro para conexão SSL, que é obrigatório
                 conn_string += '?sslmode=require'
 
-            print(f"Tentando conectar com: {conn_string}") # LOG PARA DEBUG
-            connection = psycopg2.connect(conn_string) # Tenta conectar com a URL ajustada
+            print(f"Tentando conectar com: {conn_string}") 
+            connection = psycopg2.connect(conn_string)
         else:
-            # Conexão de fallback (pode ser usado para testes locais)
+            # Conexão de fallback (local)
             connection = psycopg2.connect(
                 host=db_config['host'],
                 database=db_config['database'],
@@ -132,7 +135,6 @@ def create_db_connection():
             )
 
         print("Conexão com o banco de dados PostgreSQL bem-sucedida!")
-        # Configura a conexão para se comportar como o MySQL (opcional, mas útil)
         connection.autocommit = True 
 
     except Error as e:
@@ -189,12 +191,14 @@ def get_alunos():
         return db_connection_error_response()
     alunos = []
     try:
-        cursor = connection.cursor(cursor_factory=RealDictCursor)
+        # Cursor PG com retorno de dicionário (similar ao MySQL)
+        cursor = connection.cursor(cursor_factory=RealDictCursor) 
         cursor.execute("SELECT id, turma, nome, email, telefone, data_nascimento, rg, cpf, endereco, escolaridade, escola, responsavel FROM alunos")
         alunos = cursor.fetchall()
         for aluno in alunos:
             if aluno.get('data_nascimento'):
-                aluno['data_nascimento'] = aluno['data_nascimento'].strftime('%Y-%m-%d')
+                # PostgreSQL retorna datetime.date, precisa de strftime
+                aluno['data_nascimento'] = aluno['data_nascimento'].strftime('%Y-%m-%d') 
         cursor.close()
     except Error as e:
         print(f"Erro ao buscar alunos: {e}")
@@ -252,7 +256,6 @@ def add_aluno():
         if not aluno_data.get('responsavel'):
             print("Erro: Responsável é obrigatório.") # LOG
             return jsonify({'success': False, 'message': 'Responsável é obrigatório.'}), 400
-        # Você pode adicionar mais validações aqui para outros campos como email, telefone, rg, nome, etc.
 
         connection = create_db_connection()
         if connection:
@@ -260,9 +263,11 @@ def add_aluno():
                 cursor = connection.cursor()
 
                 # 1. Inserir na tabela 'alunos'
+                # CORREÇÃO PG: Adicionado RETURNING id para obter o ID da linha inserida
                 query_alunos = """
                 INSERT INTO alunos (turma, nome, email, telefone, data_nascimento, rg, cpf, endereco, escolaridade, escola, responsavel)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id;
                 """
                 values_alunos = (
                     aluno_data.get('turma'),
@@ -279,7 +284,9 @@ def add_aluno():
                 )
                 print(f"Executando query_alunos: {query_alunos} com valores: {values_alunos}") # LOG
                 cursor.execute(query_alunos, values_alunos)
-                aluno_id = cursor.lastrowid # Pega o ID gerado para o novo aluno
+
+                # CORREÇÃO CRÍTICA PG: Obtém o ID retornado pelo PostgreSQL
+                aluno_id = cursor.fetchone()[0] # Pega o ID gerado para o novo aluno
                 print(f"Aluno inserido com ID: {aluno_id}") # LOG
 
                 # 2. Inserir na tabela 'users' (para login_alunos)
@@ -329,13 +336,14 @@ def add_aluno():
                 }), 201
 
             except Error as e:
-                print(f"Erro MySQL ao adicionar aluno e dados relacionados: {e}") # LOG DETALHADO DO ERRO
+                print(f"Erro PostgreSQL ao adicionar aluno e dados relacionados: {e}") # LOG DETALHADO DO ERRO
                 connection.rollback()
-                # Verificar se o erro é de chave duplicada (por exemplo, email, CPF, RG, telefone)
-                if e.errno == 1062: # MySQL error code for Duplicate entry
-                    # ADIÇÃO DE LOG: Qual campo pode estar duplicado
-                    print(f"Erro de duplicidade detectado: {e.msg}")
-                    return jsonify({'success': False, 'message': f'Erro: Um registro com dados duplicados (email, CPF, RG ou telefone) já existe. Detalhes: {e.msg}'}), 409
+                
+                # CORREÇÃO PG: Manuseio de erro de Duplicidade (PostgreSQL)
+                if isinstance(e, errors.UniqueViolation): 
+                    print(f"Erro de duplicidade detectado: {e.diag.message_detail}")
+                    return jsonify({'success': False, 'message': 'Erro: Um registro com dados duplicados (email, CPF, RG ou telefone) já existe. Detalhes: Chave duplicada.'}), 409
+                
                 return jsonify({'success': False, 'message': 'Erro interno do servidor'}), 500
             finally:
                 if connection and connection.is_connected():
@@ -426,8 +434,10 @@ def edit_aluno(aluno_id):
             except Error as e:
                 print(f"Erro ao atualizar aluno: {e}")
                 connection.rollback()
-                if e.errno == 1062: # MySQL error code for Duplicate entry
-                    return jsonify({'success': False, 'message': f'Erro: Um registro com dados duplicados (email, CPF, RG ou telefone) já existe. Detalhes: {e.msg}'}), 409
+                # CORREÇÃO PG: Manuseio de erro de Duplicidade (PostgreSQL)
+                if isinstance(e, errors.UniqueViolation): 
+                    return jsonify({'success': False, 'message': 'Erro: Um registro com dados duplicados (email, CPF, RG ou telefone) já existe. Detalhes: Chave duplicada.'}), 409
+                
                 return jsonify({'success': False, 'message': 'Erro interno do servidor'}), 500
             finally:
                 connection.close()
@@ -531,12 +541,14 @@ def add_user():
             print("Usuário adicionado com sucesso.") # LOG
             return jsonify({'success': True, 'message': 'Usuário adicionado com sucesso!'}), 201
         except Error as e:
-            print(f"Erro MySQL ao adicionar usuário: {e}") # LOG DETALHADO DO ERRO
+            print(f"Erro PostgreSQL ao adicionar usuário: {e}") # LOG DETALHADO DO ERRO
             connection.rollback()
-            if e.errno == 1062: # MySQL error code for Duplicate entry
-                # ADIÇÃO DE LOG: Qual campo pode estar duplicado
-                print(f"Erro de duplicidade detectado: {e.msg}")
+            
+            # CORREÇÃO PG: Manuseio de erro de Duplicidade (PostgreSQL)
+            if isinstance(e, errors.UniqueViolation): 
+                print(f"Erro de duplicidade detectado: {e.diag.message_detail}")
                 return jsonify({'success': False, 'message': f'Erro: Nome de usuário "{username}" já existe.'}), 409
+            
             return jsonify({'success': False, 'message': 'Erro interno do servidor ou usuário já existe.'}), 500
         finally:
             if connection and connection.is_connected():
@@ -615,8 +627,8 @@ def edit_user(user_id):
         except Error as e:
             print(f"Erro ao atualizar usuário: {e}")
             connection.rollback()
-            if e.errno == 1062: # MySQL error code for Duplicate entry
-                # CORREÇÃO: Verifica se username está definido antes de usá-lo na mensagem
+            # CORREÇÃO PG: Manuseio de erro de Duplicidade (PostgreSQL)
+            if isinstance(e, errors.UniqueViolation): 
                 msg = f'Erro: Nome de usuário "{username}" já existe.' if username else 'Erro: Um registro com dados duplicados já existe.'
                 return jsonify({'success': False, 'message': msg}), 409
             return jsonify({'success': False, 'message': 'Erro interno do servidor'}), 500
@@ -669,6 +681,7 @@ def login():
             if user and check_password_hash(user['password_hash'], password):
                 # Atualiza last_login e total_logins
                 cursor_update = connection.cursor()
+                # PostgreSQL usa NOW() ou CURRENT_TIMESTAMP para a data/hora atual
                 update_query = "UPDATE users SET last_login = NOW(), total_logins = total_logins + 1, online_status = 'Online' WHERE id = %s"
                 cursor_update.execute(update_query, (user['id'],))
                 connection.commit()
@@ -944,9 +957,10 @@ def add_attendance_record():
                 cursor.execute(update_query, (attendance_status, record_id))
                 print(f"Presença do aluno {student_id} na aula {class_id} atualizada.")
             else:
-                insert_query = "INSERT INTO attendance_records (student_id, class_id, attendance_status) VALUES (%s, %s, %s)"
+                # CORREÇÃO PG: Adicionado RETURNING id e usado fetchone()[0]
+                insert_query = "INSERT INTO attendance_records (student_id, class_id, attendance_status) VALUES (%s, %s, %s) RETURNING id"
                 cursor.execute(insert_query, (student_id, class_id, attendance_status))
-                record_id = cursor.lastrowid
+                record_id = cursor.fetchone()[0] # Obtém o ID da linha inserida
                 print(f"Nova presença adicionada para o aluno {student_id} na aula {class_id}.")
 
             connection.commit()
@@ -1071,7 +1085,7 @@ def get_atividades_alunos():
     activities = []
     if connection:
         try:
-            ccursor = connection.cursor(cursor_factory=RealDictCursor)
+            cursor = connection.cursor(cursor_factory=RealDictCursor)
             # Juntar com 'alunos' para obter o nome
             query = """
             SELECT aa.*, a.nome as student_name
@@ -1178,14 +1192,17 @@ def upload_material():
         if connection:
             try:
                 cursor = connection.cursor()
+                # CORREÇÃO PG: Adicionado RETURNING id
                 query = """
                 INSERT INTO materials (name, file_type, file_size, description, file_path)
                 VALUES (%s, %s, %s, %s, %s)
+                RETURNING id;
                 """
                 values = (name, file.content_type, file.content_length, description, filename)
                 cursor.execute(query, values)
                 connection.commit()
-                material_id = cursor.lastrowid
+                # CORREÇÃO PG: Obtém o ID retornado
+                material_id = cursor.fetchone()[0]
                 cursor.close()
                 return jsonify({'success': True, 'message': 'Material enviado e registrado com sucesso!', 'id': material_id}), 201
             except Error as e:
@@ -1313,11 +1330,12 @@ def batch_update_attendance():
             if not all([student_id, class_id, status]):
                 raise ValueError(f"Registro inválido encontrado: {record}")
 
-            # Usar INSERT ... ON DUPLICATE KEY UPDATE para ser eficiente
+            # CORREÇÃO PG: Usar sintaxe ON CONFLICT do PostgreSQL
             query = """
                 INSERT INTO attendance_records (student_id, class_id, attendance_status)
                 VALUES (%s, %s, %s)
-                ON DUPLICATE KEY UPDATE attendance_status = VALUES(attendance_status)
+                ON CONFLICT (student_id, class_id) 
+                DO UPDATE SET attendance_status = EXCLUDED.attendance_status
             """
             cursor.execute(query, (student_id, class_id, status))
             
