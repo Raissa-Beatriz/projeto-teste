@@ -428,14 +428,24 @@ def edit_aluno(aluno_id):
                     return jsonify({'success': True, 'message': 'Aluno atualizado com sucesso!'}), 200
                 else:
                     return jsonify({'success': False, 'message': 'Aluno não encontrado para atualização.'}), 404
+            # ... (dentro da função edit_aluno)
+
             except Error as e:
                 print(f"Erro ao atualizar aluno: {e}")
                 connection.rollback()
-                if e.errno == 1062: # MySQL error code for Duplicate entry
-                    return jsonify({'success': False, 'message': f'Erro: Um registro com dados duplicados (email, CPF, RG ou telefone) já existe. Detalhes: {e.msg}'}), 409
+                
+                # CORREÇÃO CRÍTICA: Substitui o código de erro MySQL (e.errno == 1062)
+                if isinstance(e, errors.UniqueViolation): 
+                    return jsonify({'success': False, 'message': 'Erro: Um registro com dados duplicados (email, CPF, RG ou telefone) já existe. Detalhes: Chave duplicada.'}), 409
+                
+                # Isso deve ser corrigido para evitar acionar a exceção para códigos MySQL no PostgreSQL
+                # Se ainda tiver problemas, você pode comentar a verificação de duplicidade para testar:
+                # if isinstance(e, errors.UniqueViolation): 
+                
                 return jsonify({'success': False, 'message': 'Erro interno do servidor'}), 500
             finally:
                 connection.close()
+# ...
         return jsonify({'success': False, 'message': 'Erro de conexão com o banco de dados'}), 500
 
 # ====================================================================================================
