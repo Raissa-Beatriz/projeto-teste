@@ -839,14 +839,14 @@ document.addEventListener("DOMContentLoaded", () => {
   async function sendEditedAlunoToBackend(alunoId, alunoData) { // MODIFICAÇÃO: Adicionado 'async'
     showLoading(); // ADIÇÃO
       try {
-          // CORREÇÃO 9: Utiliza Template Literal com API_BASE_URL
-          const response = await fetch(`${API_BASE_URL}/alunos/edit/${alunoId}`, { 
-              method: 'PUT', // Método HTTP PUT para atualização
-              headers: {
-                  'Content-Type': 'application/json',
-              },
-              body: JSON.stringify(alunoData), // Converte o objeto JavaScript em uma string JSON
-          });
+        // CORREÇÃO 9: A rota correta é /alunos/edit/{alunoId}
+        const response = await fetch(`${API_BASE_URL}/alunos/edit/${alunoId}`, { // ROTA CORRIGIDA!
+            method: 'PUT', // Método HTTP PUT para atualização
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(alunoData), // Converte o objeto JavaScript em uma string JSON
+        });
           const data = await response.json(); // Espera uma resposta JSON do backend
           console.log('Resposta do backend (edição):', data);
           if (data.success) {
