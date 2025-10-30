@@ -1,6 +1,6 @@
 from flask import Flask, jsonify, send_from_directory, request, make_response
 import psycopg2 
-from psycopg2 import Error
+from psycopg2 import Error, errors # CORREÇÃO 1: Adiciona 'errors' para tratamento de exceções PostgreSQL
 from psycopg2.extras import RealDictCursor
 from werkzeug.security import generate_password_hash, check_password_hash
 import os
@@ -97,7 +97,7 @@ class StudentStatusObserver(Observer):
             print(f"OBSERVER ERROR: Erro ao atualizar status do aluno {student_id}: {e}")
             connection.rollback()
         finally:
-            if connection.is_connected():
+            if connection and connection.is_connected():
                 cursor.close()
                 connection.close()
 
@@ -205,7 +205,8 @@ def get_alunos():
         print(f"Erro ao buscar alunos: {e}")
         return jsonify({'message': 'Erro interno do servidor'}), 500
     finally:
-        connection.close()
+        if connection and connection.is_connected():
+            connection.close()
     return jsonify(alunos)
 
 @app.route('/alunos/<int:aluno_id>', methods=['GET'])
@@ -229,7 +230,8 @@ def get_aluno_by_id(aluno_id):
             print(f"Erro ao buscar aluno por ID: {e}")
             return jsonify({'message': 'Erro interno do servidor'}), 500
         finally:
-            connection.close()
+            if connection and connection.is_connected():
+                connection.close()
     return jsonify({'message': 'Erro de conexão com o banco de dados'}), 500
 
 # MODIFICAÇÃO: Rota para adicionar um novo aluno (agora com inserções em outras tabelas)
@@ -265,9 +267,11 @@ def add_aluno():
                 cursor = connection.cursor()
 
                 # 1. Inserir na tabela 'alunos'
+                # CORREÇÃO: Adiciona RETURNING id para PostgreSQL
                 query_alunos = """
                 INSERT INTO alunos (turma, nome, email, telefone, data_nascimento, rg, cpf, endereco, escolaridade, escola, responsavel)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
                 """
                 values_alunos = (
                     aluno_data.get('turma'),
@@ -284,7 +288,7 @@ def add_aluno():
                 )
                 print(f"Executando query_alunos: {query_alunos} com valores: {values_alunos}") # LOG
                 cursor.execute(query_alunos, values_alunos)
-                aluno_id = cursor.lastrowid # Pega o ID gerado para o novo aluno
+                aluno_id = cursor.fetchone()[0] # CORREÇÃO: Obtém o ID retornado
                 print(f"Aluno inserido com ID: {aluno_id}") # LOG
 
                 # 2. Inserir na tabela 'users' (para login_alunos)
@@ -293,9 +297,11 @@ def add_aluno():
                 generated_password = generate_random_password()
                 hashed_password = generate_password_hash(generated_password)
 
+                # CORREÇÃO: Adiciona RETURNING id para PostgreSQL (melhor prática)
                 query_users = """
                 INSERT INTO users (username, password_hash, full_name, role, student_id)
                 VALUES (%s, %s, %s, %s, %s)
+                RETURNING id
                 """
                 values_users = (generated_username, hashed_password, aluno_full_name, 'student', aluno_id)
                 print(f"Executando query_users: {query_users} com valores: {values_users}") # LOG
@@ -334,13 +340,12 @@ def add_aluno():
                 }), 201
 
             except Error as e:
-                print(f"Erro MySQL ao adicionar aluno e dados relacionados: {e}") # LOG DETALHADO DO ERRO
+                print(f"Erro ao adicionar aluno e dados relacionados: {e}") # LOG DETALHADO DO ERRO
                 connection.rollback()
-                # Verificar se o erro é de chave duplicada (por exemplo, email, CPF, RG, telefone)
-                if e.errno == 1062: # MySQL error code for Duplicate entry
-                    # ADIÇÃO DE LOG: Qual campo pode estar duplicado
-                    print(f"Erro de duplicidade detectado: {e.msg}")
-                    return jsonify({'success': False, 'message': f'Erro: Um registro com dados duplicados (email, CPF, RG ou telefone) já existe. Detalhes: {e.msg}'}), 409
+                # CORREÇÃO: Usa a exceção nativa do PostgreSQL para violação de unicidade
+                if isinstance(e, errors.UniqueViolation): 
+                    print(f"Erro de duplicidade detectado: {e}")
+                    return jsonify({'success': False, 'message': f'Erro: Um registro com dados duplicados (email, CPF, RG ou telefone) já existe. Detalhes: Chave duplicada (PostgreSQL).'}), 409
                 return jsonify({'success': False, 'message': 'Erro interno do servidor'}), 500
             finally:
                 if connection and connection.is_connected():
@@ -370,7 +375,8 @@ def delete_aluno(aluno_id):
             connection.rollback()
             return jsonify({'success': False, 'message': 'Erro interno do servidor'}), 500
         finally:
-            connection.close()
+            if connection and connection.is_connected():
+                connection.close()
     return jsonify({'success': False, 'message': 'Erro de conexão com o banco de dados'}), 500
 
 @app.route('/alunos/edit/<int:aluno_id>', methods=['PUT'])
@@ -428,23 +434,19 @@ def edit_aluno(aluno_id):
                     return jsonify({'success': True, 'message': 'Aluno atualizado com sucesso!'}), 200
                 else:
                     return jsonify({'success': False, 'message': 'Aluno não encontrado para atualização.'}), 404
-            # ... (dentro da função edit_aluno)
-
+            
             except Error as e:
                 print(f"Erro ao atualizar aluno: {e}")
                 connection.rollback()
                 
-                # CORREÇÃO CRÍTICA: Substitui o código de erro MySQL (e.errno == 1062)
+                # CORREÇÃO: Usa a exceção nativa do PostgreSQL para violação de unicidade
                 if isinstance(e, errors.UniqueViolation): 
-                    return jsonify({'success': False, 'message': 'Erro: Um registro com dados duplicados (email, CPF, RG ou telefone) já existe. Detalhes: Chave duplicada.'}), 409
-                
-                # Isso deve ser corrigido para evitar acionar a exceção para códigos MySQL no PostgreSQL
-                # Se ainda tiver problemas, você pode comentar a verificação de duplicidade para testar:
-                # if isinstance(e, errors.UniqueViolation): 
+                    return jsonify({'success': False, 'message': 'Erro: Um registro com dados duplicados (email, CPF, RG ou telefone) já existe. Detalhes: Chave duplicada (PostgreSQL).'}), 409
                 
                 return jsonify({'success': False, 'message': 'Erro interno do servidor'}), 500
             finally:
-                connection.close()
+                if connection and connection.is_connected():
+                    connection.close()
 # ...
         return jsonify({'success': False, 'message': 'Erro de conexão com o banco de dados'}), 500
 
@@ -467,7 +469,8 @@ def get_users():
         except Error as e:
             print(f"Erro ao buscar usuários: {e}")
         finally:
-            connection.close()
+            if connection and connection.is_connected():
+                connection.close()
     return jsonify(users)
 
 @app.route('/users/<int:user_id>', methods=['GET'])
@@ -491,7 +494,8 @@ def get_user_by_id(user_id):
             print(f"Erro ao buscar usuário por ID: {e}")
             return jsonify({'message': 'Erro interno do servidor'}), 500
         finally:
-            connection.close()
+            if connection and connection.is_connected():
+                connection.close()
     return jsonify({'message': 'Erro de conexão com o banco de dados'}), 500
 
 @app.route('/users/add', methods=['POST'])
@@ -534,9 +538,11 @@ def add_user():
     if connection:
         try:
             cursor = connection.cursor()
+            # CORREÇÃO: Adiciona RETURNING id para PostgreSQL
             query = """
             INSERT INTO users (username, password_hash, full_name, role, student_id)
             VALUES (%s, %s, %s, %s, %s)
+            RETURNING id
             """
             values = (username, hashed_password, full_name, role, student_id)
             print(f"Executando query_users: {query} com valores: {values}") # LOG
@@ -546,11 +552,11 @@ def add_user():
             print("Usuário adicionado com sucesso.") # LOG
             return jsonify({'success': True, 'message': 'Usuário adicionado com sucesso!'}), 201
         except Error as e:
-            print(f"Erro MySQL ao adicionar usuário: {e}") # LOG DETALHADO DO ERRO
+            print(f"Erro ao adicionar usuário: {e}") # LOG DETALHADO DO ERRO
             connection.rollback()
-            if e.errno == 1062: # MySQL error code for Duplicate entry
-                # ADIÇÃO DE LOG: Qual campo pode estar duplicado
-                print(f"Erro de duplicidade detectado: {e.msg}")
+            # CORREÇÃO: Usa a exceção nativa do PostgreSQL para violação de unicidade
+            if isinstance(e, errors.UniqueViolation):
+                print(f"Erro de duplicidade detectado: {e}")
                 return jsonify({'success': False, 'message': f'Erro: Nome de usuário "{username}" já existe.'}), 409
             return jsonify({'success': False, 'message': 'Erro interno do servidor ou usuário já existe.'}), 500
         finally:
@@ -630,13 +636,15 @@ def edit_user(user_id):
         except Error as e:
             print(f"Erro ao atualizar usuário: {e}")
             connection.rollback()
-            if e.errno == 1062: # MySQL error code for Duplicate entry
-                # CORREÇÃO: Verifica se username está definido antes de usá-lo na mensagem
+            # CORREÇÃO: Usa a exceção nativa do PostgreSQL para violação de unicidade
+            if isinstance(e, errors.UniqueViolation):
+                # Verifica se username está definido antes de usá-lo na mensagem
                 msg = f'Erro: Nome de usuário "{username}" já existe.' if username else 'Erro: Um registro com dados duplicados já existe.'
                 return jsonify({'success': False, 'message': msg}), 409
             return jsonify({'success': False, 'message': 'Erro interno do servidor'}), 500
         finally:
-            connection.close()
+            if connection and connection.is_connected():
+                connection.close()
     return jsonify({'success': False, 'message': 'Erro de conexão com o banco de dados'}), 500
 
 
@@ -659,7 +667,8 @@ def delete_user(user_id):
             connection.rollback()
             return jsonify({'success': False, 'message': 'Erro interno do servidor'}), 500
         finally:
-            connection.close()
+            if connection and connection.is_connected():
+                connection.close()
     return jsonify({'success': False, 'message': 'Erro de conexão com o banco de dados'}), 500
 
 # ADIÇÃO: Rota para login de usuário
@@ -707,7 +716,8 @@ def login():
             print(f"Erro no login: {e}")
             return jsonify({'success': False, 'message': 'Erro interno do servidor.'}), 500
         finally:
-            connection.close()
+            if connection and connection.is_connected():
+                connection.close()
     return jsonify({'success': False, 'message': 'Erro de conexão com o banco de dados.'}), 500
 
 # ADIÇÃO: Rota para logout de usuário (opcional, para atualizar status online)
@@ -726,7 +736,8 @@ def logout(user_id):
             print(f"Erro no logout: {e}")
             return jsonify({'success': False, 'message': 'Erro interno do servidor.'}), 500
         finally:
-            connection.close()
+            if connection and connection.is_connected():
+                connection.close()
     return jsonify({'success': False, 'message': 'Erro de conexão com o banco de dados.'}), 500
 
 
@@ -749,7 +760,8 @@ def get_classes():
         except Error as e:
             print(f"Erro ao buscar classes: {e}")
         finally:
-            connection.close()
+            if connection and connection.is_connected():
+                connection.close()
     return jsonify(classes)
 
 # ADIÇÃO: Rota para buscar uma única aula por ID
@@ -774,7 +786,8 @@ def get_class_by_id(class_id):
             print(f"Erro ao buscar aula por ID: {e}")
             return jsonify({'message': 'Erro interno do servidor'}), 500
         finally:
-            connection.close()
+            if connection and connection.is_connected():
+                connection.close()
     return jsonify({'message': 'Erro de conexão com o banco de dados'}), 500
 
 
@@ -793,7 +806,8 @@ def add_class():
     if connection:
         try:
             cursor = connection.cursor()
-            query = "INSERT INTO classes (title, date, status, description) VALUES (%s, %s, %s, %s)"
+            # CORREÇÃO: Adiciona RETURNING id para PostgreSQL
+            query = "INSERT INTO classes (title, date, status, description) VALUES (%s, %s, %s, %s) RETURNING id"
             values = (title, date, status, description)
             cursor.execute(query, values)
             connection.commit()
@@ -804,7 +818,8 @@ def add_class():
             connection.rollback()
             return jsonify({'success': False, 'message': 'Erro interno do servidor.'}), 500
         finally:
-            connection.close()
+            if connection and connection.is_connected():
+                connection.close()
     return jsonify({'success': False, 'message': 'Erro de conexão com o banco de dados.'}), 500
 
 @app.route('/classes/edit/<int:class_id>', methods=['PUT'])
@@ -849,7 +864,8 @@ def edit_class(class_id):
             connection.rollback()
             return jsonify({'success': False, 'message': 'Erro interno do servidor.'}), 500
         finally:
-            connection.close()
+            if connection and connection.is_connected():
+                connection.close()
     return jsonify({'success': False, 'message': 'Erro de conexão com o banco de dados.'}), 500
 
 @app.route('/classes/delete/<int:class_id>', methods=['DELETE'])
@@ -871,7 +887,8 @@ def delete_class(class_id):
             connection.rollback()
             return jsonify({'success': False, 'message': 'Erro interno do servidor.'}), 500
         finally:
-            connection.close()
+            if connection and connection.is_connected():
+                connection.close()
     return jsonify({'success': False, 'message': 'Erro de conexão com o banco de dados.'}), 500
 
 
@@ -901,7 +918,8 @@ def get_attendance_records():
         except Error as e:
             print(f"Erro ao buscar registros de frequência: {e}")
         finally:
-            connection.close()
+            if connection and connection.is_connected():
+                connection.close()
     return jsonify(records)
 
 @app.route('/attendance/student/<int:student_id>', methods=['GET'])
@@ -929,7 +947,8 @@ def get_attendance_by_student(student_id):
         except Error as e:
             print(f"Erro ao buscar frequência do aluno: {e}")
         finally:
-            connection.close()
+            if connection and connection.is_connected():
+                connection.close()
     return jsonify(records)
 
 
@@ -959,9 +978,10 @@ def add_attendance_record():
                 cursor.execute(update_query, (attendance_status, record_id))
                 print(f"Presença do aluno {student_id} na aula {class_id} atualizada.")
             else:
-                insert_query = "INSERT INTO attendance_records (student_id, class_id, attendance_status) VALUES (%s, %s, %s)"
+                # CORREÇÃO: Adiciona RETURNING id e usa fetchone para obter o ID
+                insert_query = "INSERT INTO attendance_records (student_id, class_id, attendance_status) VALUES (%s, %s, %s) RETURNING id"
                 cursor.execute(insert_query, (student_id, class_id, attendance_status))
-                record_id = cursor.lastrowid
+                record_id = cursor.fetchone()[0] # CORREÇÃO: Obtém o ID retornado
                 print(f"Nova presença adicionada para o aluno {student_id} na aula {class_id}.")
 
             connection.commit()
@@ -978,7 +998,7 @@ def add_attendance_record():
             connection.rollback()
             return jsonify({'success': False, 'message': 'Erro interno do servidor.'}), 500
         finally:
-            if connection.is_connected():
+            if connection and connection.is_connected():
                 connection.close()
     return jsonify({'success': False, 'message': 'Erro de conexão com o banco de dados.'}), 500
 
@@ -987,7 +1007,8 @@ def delete_attendance_record(record_id):
     connection = create_db_connection()
     if connection:
         try:
-            cursor = connection.cursor(cursor_factory=RealDictCursor)
+            # CORREÇÃO: Usa cursor normal para obter o student_id por índice
+            cursor = connection.cursor()
             
             # Pega o student_id ANTES de deletar para notificar o observer
             cursor.execute("SELECT student_id FROM attendance_records WHERE id = %s", (record_id,))
@@ -996,7 +1017,7 @@ def delete_attendance_record(record_id):
             if not result:
                 return jsonify({'success': False, 'message': 'Registro de frequência não encontrado.'}), 404
 
-            student_id = result['student_id']
+            student_id = result[0] # Obtém o ID por índice [0]
 
             # Deleta o registro
             cursor.execute("DELETE FROM attendance_records WHERE id = %s", (record_id,))
@@ -1016,7 +1037,7 @@ def delete_attendance_record(record_id):
             connection.rollback()
             return jsonify({'success': False, 'message': 'Erro interno do servidor.'}), 500
         finally:
-            if connection.is_connected():
+            if connection and connection.is_connected():
                 cursor.close()
                 connection.close()
     return jsonify({'success': False, 'message': 'Erro de conexão com o banco de dados.'}), 500
@@ -1046,7 +1067,8 @@ def get_status_alunos():
             print(f"Erro ao buscar status dos alunos: {e}")
             return jsonify({'message': 'Erro interno do servidor'}), 500
         finally:
-            connection.close()
+            if connection and connection.is_connected():
+                connection.close()
     return jsonify(statuses)
 
 # ADIÇÃO: Rota para buscar o status de um único aluno
@@ -1073,7 +1095,8 @@ def get_student_status_by_id(student_id):
             print(f"Erro ao buscar status do aluno por ID: {e}")
             return jsonify({'message': 'Erro interno do servidor'}), 500
         finally:
-            connection.close()
+            if connection and connection.is_connected():
+                connection.close()
     return jsonify({'message': 'Erro de conexão com o banco de dados'}), 500
 
 
@@ -1086,7 +1109,8 @@ def get_atividades_alunos():
     activities = []
     if connection:
         try:
-            ccursor = connection.cursor(cursor_factory=RealDictCursor)
+            # CORREÇÃO: Renomeia 'ccursor' para 'cursor'
+            cursor = connection.cursor(cursor_factory=RealDictCursor)
             # Juntar com 'alunos' para obter o nome
             query = """
             SELECT aa.*, a.nome as student_name
@@ -1101,7 +1125,8 @@ def get_atividades_alunos():
             print(f"Erro ao buscar atividades dos alunos: {e}")
             return jsonify({'message': 'Erro interno do servidor'}), 500
         finally:
-            connection.close()
+            if connection and connection.is_connected():
+                connection.close()
     return jsonify(activities)
 
 # ADIÇÃO: Rota para atualizar o status de uma aula individualmente
@@ -1147,7 +1172,8 @@ def update_aula_status(aluno_id):
             connection.rollback()
             return jsonify({'success': False, 'message': 'Erro interno do servidor.'}), 500
         finally:
-            connection.close()
+            if connection and connection.is_connected():
+                connection.close()
     return jsonify({'success': False, 'message': 'Erro de conexão com o banco de dados.'}), 500
 
 # ====================================================================================================
@@ -1169,7 +1195,8 @@ def get_materials():
         except Error as e:
             print(f"Erro ao buscar materiais: {e}")
         finally:
-            connection.close()
+            if connection and connection.is_connected():
+                connection.close()
     return jsonify(materials)
 
 @app.route('/materials/upload', methods=['POST'])
@@ -1187,28 +1214,42 @@ def upload_material():
     if file:
         filename = file.filename
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
+        
+        # CORREÇÃO: Salva o arquivo e obtém o tamanho real (mais seguro)
+        try:
+             file.save(filepath)
+             file_size = os.path.getsize(filepath)
+        except Exception as e:
+             print(f"Erro ao salvar arquivo: {e}")
+             return jsonify({'success': False, 'message': f'Erro ao salvar o arquivo: {e}'}), 500
 
         connection = create_db_connection()
         if connection:
             try:
                 cursor = connection.cursor()
+                # CORREÇÃO: Adiciona RETURNING id para PostgreSQL
                 query = """
                 INSERT INTO materials (name, file_type, file_size, description, file_path)
                 VALUES (%s, %s, %s, %s, %s)
+                RETURNING id
                 """
-                values = (name, file.content_type, file.content_length, description, filename)
+                # CORREÇÃO: Usa file_size obtido de os.path.getsize, e file.content_type como tipo
+                values = (name, file.content_type, file_size, description, filename)
                 cursor.execute(query, values)
+                material_id = cursor.fetchone()[0] # CORREÇÃO: Obtém o ID retornado
                 connection.commit()
-                material_id = cursor.lastrowid
                 cursor.close()
                 return jsonify({'success': True, 'message': 'Material enviado e registrado com sucesso!', 'id': material_id}), 201
             except Error as e:
                 print(f"Erro ao registrar material no DB: {e}")
                 connection.rollback()
+                # Se houver um arquivo salvo, tente removê-lo em caso de falha no DB
+                if os.path.exists(filepath):
+                    os.remove(filepath)
                 return jsonify({'success': False, 'message': 'Erro interno do servidor ao registrar material.'}), 500
             finally:
-                connection.close()
+                if connection and connection.is_connected():
+                    connection.close()
         return jsonify({'success': False, 'message': 'Erro de conexão com o banco de dados.'}), 500
     return jsonify({'success': False, 'message': 'Erro no upload do arquivo.'}), 500
 
@@ -1253,7 +1294,8 @@ def edit_material(material_id):
             connection.rollback()
             return jsonify({'success': False, 'message': 'Erro interno do servidor.'}), 500
         finally:
-            connection.close()
+            if connection and connection.is_connected():
+                connection.close()
     return jsonify({'success': False, 'message': 'Erro de conexão com o banco de dados.'}), 500
 
 @app.route('/materials/delete/<int:material_id>', methods=['DELETE'])
@@ -1286,7 +1328,8 @@ def delete_material(material_id):
             connection.rollback()
             return jsonify({'success': False, 'message': 'Erro interno do servidor.'}), 500
         finally:
-            connection.close()
+            if connection and connection.is_connected():
+                connection.close()
     return jsonify({'success': False, 'message': 'Erro de conexão com o banco de dados.'}), 500
 
 # ADIÇÃO: Nova rota para configuração do sistema
@@ -1317,7 +1360,10 @@ def batch_update_attendance():
 
     try:
         # 1. Iniciar a transação
-        connection.start_transaction()
+        # Em psycopg2, o commit manual é o padrão se autocommit=False.
+        # Como create_db_connection() seta autocommit=True, desativamos para usar commit/rollback
+        if connection.autocommit:
+            connection.autocommit = False 
 
         # 2. Iterar sobre todos os registros e executar as escritas
         for record in records:
@@ -1343,6 +1389,7 @@ def batch_update_attendance():
 
         # 3. Notificar o Observer para cada aluno afetado APÓS todas as escritas
         for student_id in student_ids_to_update:
+            # OBS: Mantendo a lógica de notificação original do usuário
             attendance_subject.notify(student_id)
         
         # 4. Se tudo deu certo, confirmar a transação
@@ -1358,6 +1405,6 @@ def batch_update_attendance():
         
     finally:
         # 6. Fechar a conexão
-        if connection.is_connected():
+        if connection and connection.is_connected():
             cursor.close()
             connection.close()
