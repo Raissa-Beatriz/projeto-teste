@@ -90,16 +90,21 @@
         showLoading();
         try {
             // Carrega todos os dados necessários em paralelo (usando as funções corrigidas de script.js)
-            [allStudents, allActivities, config] = await Promise.all([
+            const results = await Promise.all([
                 window.fetchStudents(),
                 window.fetchStudentActivities(),
                 window.fetchSystemConfig()
             ]);
+
+            allStudents = results[0];
+            allActivities = results[1];
+            config = results[2];
+            
             populateTurmaSelect();
         } catch (error) {
             console.error('Erro ao carregar dados iniciais de atividades:', error);
             // Mensagem de erro mais clara no caso de falha de API
-            document.getElementById('turmaSelect').innerHTML = '<option value="">ERRO: Falha ao carregar alunos.</option>';
+            document.getElementById('turmaSelect').innerHTML = '<option value="">ERRO: Falha ao carregar alunos. Recarregue.</option>';
             showGlobalMessageModal('Erro Crítico', 'Não foi possível carregar os dados. Verifique a conexão do servidor (API /alunos).');
         } finally {
             hideLoading();
@@ -109,7 +114,9 @@
     function populateTurmaSelect() {
         const selectElement = document.getElementById('turmaSelect');
         if (!allStudents || allStudents.length === 0) {
-            selectElement.innerHTML = '<option value="">Nenhum aluno encontrado. Verifique o BD.</option>';
+            // Se a lista de alunos estiver vazia, verifica se o problema é a falta de dados
+            const msg = allStudents.length === 0 ? 'Nenhum aluno com turma cadastrada.' : 'ERRO: Falha ao processar a lista de alunos.';
+            selectElement.innerHTML = `<option value="">${msg}</option>`;
             return;
         }
         // Extrai os valores únicos de 'turma' e ordena
@@ -273,5 +280,7 @@
         userAvatar.title = "Clique para fazer logout";
     }
 </script>
+
 </body>
+
 </html>
